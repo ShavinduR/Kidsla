@@ -19,6 +19,7 @@ export default function App() {
           <Suspense fallback={<div className="grid min-h-screen place-items-center text-ink-soft">Loading…</div>}>
             <Routes>
               <Route path="/" element={<Storefront />} />
+              <Route path="/p/:slug" element={<Storefront />} />
               <Route path="/admin" element={<AdminGate />} />
               <Route path="*" element={<Storefront />} />
             </Routes>

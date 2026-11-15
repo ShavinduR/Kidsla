@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { ImageOff } from 'lucide-react'
+import { imageSrc, srcSet } from '../utils/images'
 
-// Image with a soft pastel skeleton while loading and a graceful fallback on error.
-export default function SmartImage({ src, alt, className = '', tint = 'bg-sand' }) {
+// Image with a soft pastel skeleton while loading, a graceful fallback on error, and responsive
+// sizes (`sizes` tells the browser how wide it's displayed, so phones get small files).
+export default function SmartImage({ src, alt, className = '', tint = 'bg-sand', sizes = '100vw', ratio = null, priority = false }) {
   const [status, setStatus] = useState('loading')
 
   return (
@@ -21,9 +23,12 @@ export default function SmartImage({ src, alt, className = '', tint = 'bg-sand' 
       )}
       {status !== 'error' && (
         <img
-          src={src}
+          src={imageSrc(src, { w: 720, ratio })}
+          srcSet={srcSet(src, { ratio })}
+          sizes={sizes}
           alt={alt}
-          loading="lazy"
+          loading={priority ? 'eager' : 'lazy'}
+          decoding="async"
           onLoad={() => setStatus('loaded')}
           onError={() => setStatus('error')}
           className={`h-full w-full object-cover transition-all duration-700 ease-out group-hover:scale-105 ${

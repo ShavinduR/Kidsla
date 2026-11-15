@@ -53,7 +53,7 @@ export default function Categories({ onSelect }) {
             onClick={() => onSelect(tile.key)}
             className={`group relative overflow-hidden rounded-[1.75rem] text-left ${tile.className}`}
           >
-            <SmartImage src={tile.image} alt={tile.title} tint={tile.tint} className="absolute inset-0 h-full w-full" />
+            <SmartImage src={tile.image} alt={tile.title} tint={tile.tint} sizes="(min-width: 768px) 33vw, 50vw" className="absolute inset-0 h-full w-full" />
             <div className="absolute inset-0 bg-gradient-to-t from-ink/55 via-ink/5 to-transparent transition-opacity duration-500 group-hover:from-ink/65" />
             <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4 sm:p-6">
               <div>

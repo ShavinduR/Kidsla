@@ -12,6 +12,7 @@ export const RULES = {
   orderIpDay: { limit: 50, windowSec: 24 * 3600 }, //   carriers put many customers behind one IP (CGNAT)
   orderAll: { limit: 300, windowSec: 60 * 60 }, // checkouts site-wide (spam floods)
   import: { limit: 20, windowSec: 60 * 60 }, // spreadsheet uploads per admin
+  upload: { limit: 200, windowSec: 60 * 60 }, // photo upload signatures per admin session
   alertError: { limit: 1, windowSec: 10 * 60 }, // max one "server error" email per 10 minutes
 }
 

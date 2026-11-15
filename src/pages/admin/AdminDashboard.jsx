@@ -85,7 +85,12 @@ export default function AdminDashboard({ onLogout }) {
       <InventoryTab
         products={state.products}
         onReload={load}
-        onProductSaved={(p) => setState((s) => ({ ...s, products: s.products.map((x) => (x.id === p.id ? p : x)) }))}
+        onProductSaved={(p) =>
+          setState((s) => ({
+            ...s,
+            products: s.products.some((x) => x.id === p.id) ? s.products.map((x) => (x.id === p.id ? p : x)) : [p, ...s.products],
+          }))
+        }
         toast={toast}
       />
     )

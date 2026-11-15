@@ -8,6 +8,7 @@ const ProductsContext = createContext(null)
 export function ProductsProvider({ children }) {
   const [products, setProducts] = useState(initialProducts)
   const [source, setSource] = useState('bundled') // bundled | live
+  const [ready, setReady] = useState(false) // live catalogue loaded (or known to be unavailable)
 
   useEffect(() => {
     let cancelled = false
@@ -20,14 +21,21 @@ export function ProductsProvider({ children }) {
         }
       })
       .catch(() => {})
+      .finally(() => !cancelled && setReady(true))
     return () => {
       cancelled = true
     }
   }, [])
 
   const value = useMemo(
-    () => ({ products, source, getProduct: (id) => products.find((p) => p.id === id) }),
-    [products, source],
+    () => ({
+      products,
+      source,
+      ready,
+      getProduct: (id) => products.find((p) => p.id === id),
+      getBySlug: (slug) => products.find((p) => p.slug === slug),
+    }),
+    [products, source, ready],
   )
   return <ProductsContext.Provider value={value}>{children}</ProductsContext.Provider>
 }

@@ -1,42 +1,53 @@
 import { useMemo, useRef, useState } from 'react'
-import { Database, Download, FileSpreadsheet, Package, PackageX, Pencil, RefreshCw, Search, TriangleAlert, Upload } from 'lucide-react'
+import { Archive, Database, Download, FileSpreadsheet, Package, PackageX, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, TriangleAlert, Upload } from 'lucide-react'
 import ImportDialog from './ImportDialog'
 import EditProductDialog from './EditProductDialog'
+import ProductEditor from './ProductEditor'
 import { btn } from './ui'
 import { SIZES } from '../../../shared/inventory.js'
 import { totalStock } from '../../data/products'
 import { exportUrl, importInventory } from '../../services/adminApi'
 import { formatLKR } from '../../utils/format'
+import { imageSrc } from '../../utils/images'
 
 const LOW = 3
-const STATUS_STYLE = { active: 'bg-sage-light text-sage-dark', coming_soon: 'bg-blush-light text-rose', hidden: 'bg-sand text-ink-soft' }
-const STATUS_LABEL = { active: 'Active', coming_soon: 'Coming soon', hidden: 'Hidden' }
+const STATUS_STYLE = { active: 'bg-sage-light text-sage-dark', coming_soon: 'bg-blush-light text-rose', hidden: 'bg-sand text-ink-soft', archived: 'bg-ink/10 text-ink-soft' }
+const STATUS_LABEL = { active: 'Active', coming_soon: 'Coming soon', hidden: 'Hidden', archived: 'Archived' }
 
 export default function InventoryTab({ products, onReload, onProductSaved, toast }) {
   const [query, setQuery] = useState('')
   const [cat, setCat] = useState('All')
-  const [editing, setEditing] = useState(null)
+  const [editing, setEditing] = useState(null) // quick edit (price/status/stock)
+  const [details, setDetails] = useState(undefined) // full editor: product, or null = new product
+  const [showArchived, setShowArchived] = useState(false)
   const [importing, setImporting] = useState(null) // { file, report }
   const [busy, setBusy] = useState(false)
   const fileInput = useRef(null)
 
+  const archivedCount = products.filter((p) => p.status === 'archived').length
+  const live = useMemo(() => products.filter((p) => p.status !== 'archived'), [products])
   const stats = useMemo(() => {
-    const clothing = products.filter((p) => p.category === 'Clothing')
+    const clothing = live.filter((p) => p.category === 'Clothing')
     const slots = clothing.flatMap((p) => SIZES.map((s) => p.stock?.[s] ?? 0))
     return {
-      total: products.length,
-      active: products.filter((p) => p.status === 'active').length,
+      total: live.length,
+      active: live.filter((p) => p.status === 'active').length,
       units: clothing.reduce((s, p) => s + totalStock(p), 0),
       held: clothing.reduce((s, p) => s + SIZES.reduce((a, z) => a + (p.reserved?.[z] ?? 0), 0), 0),
       low: slots.filter((n) => n > 0 && n <= LOW).length,
       out: slots.filter((n) => n === 0).length,
     }
-  }, [products])
+  }, [live])
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return products.filter((p) => (cat === 'All' || p.category === cat) && (!q || `${p.id} ${p.title} ${p.material}`.toLowerCase().includes(q)))
-  }, [products, query, cat])
+    return products.filter(
+      (p) =>
+        (showArchived ? p.status === 'archived' : p.status !== 'archived') &&
+        (cat === 'All' || p.category === cat) &&
+        (!q || `${p.id} ${p.title} ${p.material} ${p.slug}`.toLowerCase().includes(q)),
+    )
+  }, [products, query, cat, showArchived])
 
   const onFile = async (e) => {
     const file = e.target.files?.[0]
@@ -57,10 +68,13 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
           <p className="mt-1 text-ink-soft">Live from your database. Changes appear in the shop within about 30 seconds.</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <button onClick={() => setDetails(null)} className={btn.primary}>
+            <Plus className="h-5 w-5" /> Add product
+          </button>
           <a href={exportUrl('xlsx')} className={btn.secondary} download>
             <Download className="h-5 w-5" /> Export to Excel
           </a>
-          <button onClick={() => fileInput.current?.click()} disabled={busy} className={btn.primary}>
+          <button onClick={() => fileInput.current?.click()} disabled={busy} className={btn.secondary}>
             <Upload className="h-5 w-5" /> {busy ? 'Checking file…' : 'Bulk Import Update'}
           </button>
           <input ref={fileInput} type="file" accept=".xlsx,.csv" className="hidden" onChange={onFile} />
@@ -98,10 +112,13 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
             </button>
           ))}
         </div>
+        <button onClick={() => setShowArchived((v) => !v)} aria-pressed={showArchived} className={`${btn.ghost} ${showArchived ? 'bg-ink text-cream hover:bg-ink' : ''}`}>
+          <Archive className="h-4 w-4" /> Archived ({archivedCount})
+        </button>
         <button onClick={onReload} className={btn.ghost}><RefreshCw className="h-4 w-4" /> Refresh</button>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-2xl bg-white ring-1 ring-sand">
+      <div className="relative mt-4 overflow-x-auto rounded-2xl bg-white ring-1 ring-sand">
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="border-b border-sand bg-sand/40 text-xs tracking-wide text-ink-soft uppercase">
             <tr>
@@ -119,7 +136,7 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
               <tr key={p.id} className="transition-colors hover:bg-cream">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <img src={p.images?.[0]} alt="" className="h-12 w-10 rounded-lg bg-sand object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
+                    <img src={imageSrc(p.images?.[0], { w: 120, ratio: '4:5' })} alt="" className="h-12 w-10 rounded-lg bg-sand object-cover" loading="lazy" onError={(e) => { e.currentTarget.style.visibility = 'hidden' }} />
                     <div>
                       <p className="font-medium">{p.title}</p>
                       <p className="font-mono text-xs text-ink-soft">{p.id}</p>
@@ -141,9 +158,14 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
                   )
                 })}
                 <td className="px-4 py-3 text-right font-semibold">{p.category === 'Clothing' ? totalStock(p) : '—'}</td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => setEditing(p)} className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium ring-1 ring-sand-dark hover:bg-sand" aria-label={`Edit ${p.title}`}>
-                    <Pencil className="h-3.5 w-3.5" /> Edit
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  {p.status !== 'archived' && (
+                    <button onClick={() => setEditing(p)} className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium ring-1 ring-sand-dark hover:bg-sand" aria-label={`Edit ${p.title}`} title="Quick edit: price, status, stock">
+                      <Pencil className="h-3.5 w-3.5" /> Edit
+                    </button>
+                  )}
+                  <button onClick={() => setDetails(p)} className="ml-1.5 inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium ring-1 ring-sand-dark hover:bg-sand" aria-label={`Details ${p.title}`} title="Everything: photos, colours, sizes, description">
+                    <SlidersHorizontal className="h-3.5 w-3.5" /> Details
                   </button>
                 </td>
               </tr>
@@ -173,6 +195,17 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
             setEditing(null)
             onProductSaved(saved)
             toast(changed?.length ? `Saved: ${changed.join(', ')}` : 'No changes.')
+          }}
+        />
+      )}
+      {details !== undefined && (
+        <ProductEditor
+          product={details}
+          onClose={() => setDetails(undefined)}
+          onSaved={(saved, changed) => {
+            setDetails(undefined)
+            onProductSaved(saved)
+            toast(details === null ? `Created ${saved.title} (${saved.id}).` : changed?.length ? `Saved: ${changed.join(', ')}` : 'No changes.')
           }}
         />
       )}

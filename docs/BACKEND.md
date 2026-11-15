@@ -6,7 +6,10 @@ Everything server-side lives in `/api` (Vercel deploys each file as a function) 
 |---|---|---|
 | `GET /api/products` | public | Live catalogue (hidden products excluded). CDN-cached 30 s. |
 | `POST /api/orders` | public | Saves a checkout as **pending**. Server re-checks stock and recomputes all prices, then issues `KD-YYMM-NNN` (sequential per month, Sri Lanka time). |
-| `GET/PATCH /api/admin/products` | admin | List all products / edit one (price, status, stock per size). |
+| `GET/POST/PATCH /api/admin/products` | admin | List all / create / edit (any field, version-checked). Validated with `shared/productSchema.js`. |
+| `POST /api/admin/upload-signature` | admin | Short-lived Cloudinary signature; the browser uploads directly to Cloudinary. |
+| `GET /p/:slug` → `/api/product-page` | public | App shell with that product's meta tags + JSON-LD (link previews, Google). CDN-cached 5 min. |
+| `GET /sitemap.xml`, `/robots.txt` | public | Generated from the catalogue. |
 | `POST /api/admin/seed` | admin | Load the starter catalogue into an **empty** database. |
 | `GET /api/admin/export?format=xlsx\|csv` | admin | Inventory spreadsheet. |
 | `POST /api/admin/import?dryRun=1` | admin | Upload .xlsx/.csv → change report; without `dryRun` → one `bulkWrite`. |
@@ -16,7 +19,7 @@ Everything server-side lives in `/api` (Vercel deploys each file as a function) 
 ## Collections (database `kidsla`)
 - **sessions** `{ _id: sha256(token), tag, createdAt, expiresAt (TTL), device, ip (hashed) }`
 - **ratelimits** `{ _id: "rule:who:window", count, expiresAt (TTL) }`
-- **products** `{ _id: "KD-G-001", title, category, gender, material, price, status, sizes, colors, images, stock: { "1-2Y": 6, … }, position }`
+- **products** `{ _id: "KD-G-001", slug (unique), title, description, category, gender, material, price, status: active|coming_soon|hidden|archived, badge, sizes, colors, images (original URLs), stock, reserved, version, position }`
 - **orders** `{ _id: "KD-2611-001", status: pending|confirmed|cancelled, customer, items[], subtotal, deliveryFee, total, createdAt, history[] }`
 - **counters** `{ _id: "order-2611", seq }`: monthly order number
 

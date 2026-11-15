@@ -22,7 +22,7 @@ test.beforeEach(async ({ context }) => {
 test('shop + checkout + admin work under the enforced CSP', async ({ page }) => {
   await seed()
   await page.goto('/')
-  await page.getByRole('button', { name: 'View Cloud Ruffle Dress' }).click()
+  await page.getByRole('link', { name: 'View Cloud Ruffle Dress' }).click()
   await page.getByRole('button', { name: /Size guide/ }).click()
   await page.getByRole('button', { name: /3-4Y/ }).click()
   await page.getByRole('button', { name: /^Add/ }).click()

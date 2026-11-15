@@ -1,6 +1,7 @@
 // Mock catalogue. In production this comes from GET /api/products (MongoDB).
 // Shape stays identical so swapping to the API is a one-line change.
 import { CLOTHING_SIZES } from './sizeGuide.js'
+import { slugify } from '../../shared/slug.js'
 
 const u = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=80`
 
@@ -26,7 +27,9 @@ export const totalStock = (p) => Object.values(p.stock ?? {}).reduce((a, b) => a
 const clothing = (p) => ({ category: CATEGORIES.CLOTHING, status: 'active', sizes: CLOTHING_SIZES, ...p })
 const comingSoon = (p) => ({ status: 'coming_soon', sizes: [ONE_SIZE], stock: {}, ...p })
 
-export const initialProducts = [
+const withSlugs = (list) => list.map((p) => ({ slug: slugify(p.title), ...p }))
+
+export const initialProducts = withSlugs([
   // ---------- Girls ----------
   clothing({
     id: 'KD-G-001', title: 'Cloud Ruffle Dress', gender: 'Girls', material: '100% Cotton', price: 4250,
@@ -109,4 +112,4 @@ export const initialProducts = [
     colors: [{ name: 'Earth Tones', hex: '#C9A88E' }], images: gallery('Educational', 2),
     description: 'Tactile counting fun that makes numbers feel like play.',
   }),
-]
+])

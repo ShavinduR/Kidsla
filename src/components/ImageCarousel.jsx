@@ -35,7 +35,7 @@ export default function ImageCarousel({ images, alt, tint, className = '' }) {
       <div ref={track} className="snap-carousel no-scrollbar flex h-full w-full overflow-x-auto" tabIndex={0}>
         {images.map((src, i) => (
           <div key={src + i} className="h-full w-full shrink-0" aria-label={`Photo ${i + 1} of ${images.length}`}>
-            <SmartImage src={src} alt={`${alt} — photo ${i + 1}`} tint={tint} className="h-full w-full" />
+            <SmartImage src={src} alt={`${alt} — photo ${i + 1}`} tint={tint} sizes="(min-width: 640px) 50vw, 100vw" ratio="4:5" priority={i === 0} className="h-full w-full" />
           </div>
         ))}
       </div>

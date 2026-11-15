@@ -30,9 +30,27 @@ npm run build
 | `CRON_SECRET` | recommended | Random string; lets Vercel's daily job release expired order holds |
 | `RESEND_API_KEY` + `ALERT_EMAIL_TO` | recommended | Email alerts: new orders, server errors, login attacks ([resend.com](https://resend.com), free tier) |
 | `ALERT_EMAIL_FROM` | optional | Sender once you verify your domain in Resend (default: Resend's test sender) |
+| `CLOUDINARY_URL` | recommended | Photo uploads: `cloudinary://KEY:SECRET@CLOUD` from Cloudinary → Dashboard ([cloudinary.com](https://cloudinary.com), free tier) |
 | `VITE_SENTRY_DSN` | optional | Front-end error tracking ([sentry.io](https://sentry.io), free tier) |
 | `VITE_META_PIXEL_ID` | optional | Meta Pixel for ads |
 | `MONGODB_DB` | optional | Database name (default `kidsla`) |
+
+## Managing products (`/admin` → Inventory)
+- **Add product** / **Details**: title, link name, description, category, Girls/Boys, material, price, status, badge,
+  sizes + stock, colours (swatch + name) and up to 8 photos (drag or arrows to reorder; first = cover).
+- **Edit** (quick): price, status and stock only.
+- **Archive** instead of delete: the product leaves the shop, past orders keep working, **Restore** brings it back.
+- New products are saved as **Hidden** until you set them to Active. Toys & Educational can be listed as Coming soon.
+- Photos are resized in your browser and their hidden metadata (incl. GPS location) is removed, then uploaded straight
+  to Cloudinary. Without `CLOUDINARY_URL` you can still paste Unsplash links.
+- The same validation rules run in the form and on the server (`shared/productSchema.js`).
+
+## Product links & SEO
+- Every product has a shareable link: `/p/<link-name>`, e.g. `/p/cloud-ruffle-dress`. It opens the product on top of the shop.
+- These links get their **own WhatsApp/Facebook preview** (title, price, photo) and Google product data, rendered by
+  `api/product-page.js`. Test a link at https://developers.facebook.com/tools/debug/.
+- `/sitemap.xml` lists all public products; `/robots.txt` points Google at it. Submit the sitemap in Google Search Console.
+- Images are served responsive (right size per screen, WebP/AVIF on Cloudinary).
 
 ## Ordering rules
 - Only **Clothing** with `status: 'active'` can be ordered. Toys & Educational show **Coming Soon** + "Notify Me on WhatsApp".
@@ -89,7 +107,7 @@ Exports include a **`version`** column. Don't edit it. A row is only imported if
 (sales, edits). Changed rows are skipped and listed, so old spreadsheets can never put sold stock back. Just export again.
 
 ## Tests
-34 end-to-end tests (real browser, real API, real MongoDB) run on every push via GitHub Actions (`.github/workflows/ci.yml`).
+49 end-to-end tests (real browser, real API, real MongoDB) run on every push via GitHub Actions (`.github/workflows/ci.yml`).
 Locally (needs Docker):
 ```bash
 docker run -d --name kidsla-mongo -p 27017:27017 mongo:7 --replSet rs0

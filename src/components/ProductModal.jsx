@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Check, ChevronDown, Minus, Plus, RotateCcw, Ruler, ShoppingBag, X } from 'lucide-react'
+import { Bell, Check, ChevronDown, Link2, Minus, Plus, RotateCcw, Ruler, Share2, ShoppingBag, X } from 'lucide-react'
 import ImageCarousel from './ImageCarousel'
 import SizeGuide from './SizeGuide'
 import { useCart } from '../context/CartContext'
@@ -10,6 +10,39 @@ import { track } from '../utils/analytics'
 import useLockBody from '../utils/useLockBody'
 
 const LOW_STOCK = 3
+
+// Native share sheet on phones (WhatsApp, Instagram, …); copy the link elsewhere.
+function ShareButton({ product }) {
+  const [copied, setCopied] = useState(false)
+  const share = async () => {
+    const url = `${window.location.origin}/p/${product.slug}`
+    track('Share', { content_ids: [product.id] })
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `${product.title} · KIDSLA`, text: `${product.title} from KIDSLA`, url })
+        return
+      } catch (err) {
+        if (err?.name === 'AbortError') return
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      window.prompt('Copy this link:', url)
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={share}
+      className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium text-ink-soft ring-1 ring-sand-dark transition-colors hover:bg-sand hover:text-ink"
+    >
+      {copied ? <><Link2 className="h-4 w-4" /> Link copied</> : <><Share2 className="h-4 w-4" /> Share</>}
+    </button>
+  )
+}
 
 export default function ProductModal({ product, onClose }) {
   const { addItem, openCart, qtyInCart } = useCart()
@@ -80,7 +113,10 @@ export default function ProductModal({ product, onClose }) {
               {product.gender ? `${product.gender} · ` : ''}{product.category}
             </p>
             <h2 id="pm-title" className="mt-2 pr-10 text-2xl font-semibold tracking-tight sm:text-3xl">{product.title}</h2>
-            <p className="mt-2 text-xl font-semibold">{formatLKR(product.price)}</p>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <p className="text-xl font-semibold">{formatLKR(product.price)}</p>
+              <ShareButton product={product} />
+            </div>
             <p className="mt-4 leading-relaxed text-ink-soft">{product.description}</p>
 
             <span className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-sage-light px-3 py-1.5 text-sm font-medium text-sage-dark">

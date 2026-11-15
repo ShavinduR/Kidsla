@@ -1,8 +1,9 @@
 // Inventory spreadsheet format + validation. Shared by /api (server) and the admin UI.
 import { CLOTHING_SIZES } from '../src/data/sizeGuide.js'
+import { PRODUCT_STATUSES } from './productSchema.js'
 
 export const SIZES = CLOTHING_SIZES
-export const STATUSES = ['active', 'coming_soon', 'hidden']
+export const STATUSES = PRODUCT_STATUSES
 // `version` = optimistic-concurrency counter. Every write to a product (admin edit, import, order
 // confirm/cancel) increments it. An import row or edit is only applied if the version it was based on
 // is still current, so stale spreadsheets / dialogs can't silently overwrite newer stock (audit H1).
@@ -59,6 +60,7 @@ export function validateEdit(product, input, where = product.id) {
   if (!isBlank(input.status)) {
     const status = String(input.status).trim()
     if (!STATUSES.includes(status)) errors.push(`${where}: status "${clip(status)}" must be ${STATUSES.join(' / ')}.`)
+    else if (status === 'active' && product.category !== 'Clothing') errors.push(`${where}: ${product.category} items can’t be ordered yet: use coming_soon.`)
     else if (status !== product.status) {
       update.status = status
       diff.push(`status ${product.status} → ${status}`)

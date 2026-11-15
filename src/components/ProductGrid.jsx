@@ -4,7 +4,7 @@ import { useProducts } from '../context/ProductsContext'
 
 const FILTERS = ['All', 'Girls', 'Boys', 'Toys', 'Educational']
 
-export default function ProductGrid({ filter, onFilterChange, onQuickView }) {
+export default function ProductGrid({ filter, onFilterChange }) {
   const { products: all } = useProducts()
   const products = useMemo(() => all.filter((p) => p.status !== 'hidden'), [all])
   const visible = useMemo(() => {
@@ -54,7 +54,7 @@ export default function ProductGrid({ filter, onFilterChange, onQuickView }) {
 
         <div key={filter} className="grid animate-fade-in grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-5 md:grid-cols-3 lg:grid-cols-4 lg:gap-x-6 lg:gap-y-12">
           {visible.map((p) => (
-            <ProductCard key={p.id} product={p} onQuickView={onQuickView} />
+            <ProductCard key={p.id} product={p} />
           ))}
         </div>
 

@@ -55,6 +55,8 @@ export default function Hero({ onShop }) {
         <div className="relative mx-auto w-full max-w-md md:max-w-none">
           <div className="grid grid-cols-5 gap-3 sm:gap-4">
             <SmartImage
+              sizes="(min-width: 768px) 30vw, 60vw"
+              priority
               src="https://images.unsplash.com/photo-1519689680058-324335c77eba?auto=format&fit=crop&w=900&q=80"
               alt="Child in soft cotton outfit"
               className="col-span-3 aspect-[3/4] rounded-[2rem] shadow-xl shadow-ink/5"
@@ -62,6 +64,8 @@ export default function Hero({ onShop }) {
             />
             <div className="col-span-2 flex flex-col gap-3 pt-10 sm:gap-4 sm:pt-16">
               <SmartImage
+                sizes="(min-width: 768px) 20vw, 40vw"
+                priority
                 src="https://images.unsplash.com/photo-1522771930-78848d9293e8?auto=format&fit=crop&w=600&q=80"
                 alt="Cotton baby essentials"
                 className="aspect-square rounded-[1.5rem]"

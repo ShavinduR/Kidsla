@@ -3,7 +3,7 @@ import { Dialog, btn } from './ui'
 import { SIZES, STATUSES } from '../../../shared/inventory.js'
 import { updateProduct } from '../../services/adminApi'
 
-const STATUS_LABEL = { active: 'Active (can be ordered)', coming_soon: 'Coming soon', hidden: 'Hidden from shop' }
+const STATUS_LABEL = { active: 'Active (can be ordered)', coming_soon: 'Coming soon', hidden: 'Hidden from shop', archived: 'Archived' }
 
 const formFrom = (p) => ({
   price: String(p.price),
@@ -80,7 +80,7 @@ export default function EditProductDialog({ product: initial, onClose, onSaved }
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">Status</span>
             <select value={status} onChange={(e) => setStatus(e.target.value)} className={field}>
-              {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+              {STATUSES.filter((s) => s !== 'archived' && (isClothing || s !== 'active')).map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
             </select>
           </label>
         </div>

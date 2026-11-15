@@ -152,7 +152,7 @@ export default function CartDrawer() {
               <ul className="divide-y divide-sand">
                 {lines.map((l) => (
                   <li key={l.key} className="flex gap-4 py-5">
-                    <SmartImage src={l.product.images[0]} alt={l.product.title} className="h-24 w-20 shrink-0 rounded-2xl" />
+                    <SmartImage src={l.product.images[0]} alt={l.product.title} sizes="80px" ratio="4:5" className="h-24 w-20 shrink-0 rounded-2xl" />
                     <div className="flex min-w-0 flex-1 flex-col">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="text-sm leading-snug font-medium">{l.product.title}</h3>

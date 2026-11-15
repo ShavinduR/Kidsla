@@ -23,7 +23,7 @@ test.beforeAll(async () => {
 test('coming-soon items cannot be ordered; Notify Me opens WhatsApp', async ({ page }) => {
   const urls = waUrls(page)
   await page.goto('/')
-  await page.getByRole('button', { name: 'View Wooden Stacking Rainbow' }).click()
+  await page.getByRole('link', { name: 'View Wooden Stacking Rainbow' }).click()
   await expect(page.getByRole('button', { name: /^Add/ })).toHaveCount(0)
   await page.getByText('Notify Me on WhatsApp').click()
   await expect.poll(() => urls.some((u) => u.includes('Please notify me'))).toBe(true)
@@ -31,7 +31,7 @@ test('coming-soon items cannot be ordered; Notify Me opens WhatsApp', async ({ p
 
 test('product modal: carousel, size guide, sold-out sizes, stock cap', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'View Petal Knit Cardigan' }).click()
+  await page.getByRole('link', { name: 'View Petal Knit Cardigan' }).click()
   await expect(page.getByRole('button', { name: /Show photo/ })).toHaveCount(4)
   await expect(page.getByRole('button', { name: /3-4Y/ })).toBeDisabled()
   await page.getByRole('button', { name: /Size guide/ }).click()
@@ -46,7 +46,7 @@ test('product modal: carousel, size guide, sold-out sizes, stock cap', async ({ 
 test('checkout: order saved, stock held, WhatsApp message, cart cleared', async ({ page }) => {
   const urls = waUrls(page)
   await page.goto('/')
-  await page.getByRole('button', { name: 'View Essential Crew Tee' }).click()
+  await page.getByRole('link', { name: 'View Essential Crew Tee' }).click()
   await page.getByRole('button', { name: /1-2Y/ }).click()
   await page.getByRole('button', { name: 'Increase quantity' }).click()
   await page.getByRole('button', { name: /^Add/ }).click()
@@ -72,7 +72,7 @@ test('checkout: order saved, stock held, WhatsApp message, cart cleared', async 
 test('item sold out while in the cart → clear message, nothing sent', async ({ page }) => {
   const urls = waUrls(page)
   await page.goto('/')
-  await page.getByRole('button', { name: 'View Relaxed Jogger Pants' }).click()
+  await page.getByRole('link', { name: 'View Relaxed Jogger Pants' }).click()
   await page.getByRole('button', { name: /5-6Y/ }).click()
   await page.getByRole('button', { name: /^Add/ }).click()
   await fillCheckout(page)
@@ -87,7 +87,7 @@ test('server down → order still sent with a KDX- fallback ID', async ({ page }
   const urls = waUrls(page)
   await page.route('**/api/orders', (r) => r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"down"}' }))
   await page.goto('/')
-  await page.getByRole('button', { name: 'View Cloud Ruffle Dress' }).click()
+  await page.getByRole('link', { name: 'View Cloud Ruffle Dress' }).click()
   await page.getByRole('button', { name: /3-4Y/ }).click()
   await page.getByRole('button', { name: /^Add/ }).click()
   await fillCheckout(page)

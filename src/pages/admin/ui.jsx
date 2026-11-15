@@ -4,7 +4,7 @@ export function Dialog({ title, subtitle, onClose, children, footer, labelId = '
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby={labelId}>
       <div className="absolute inset-0 animate-fade-in bg-ink/45 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative flex max-h-[88dvh] w-full max-w-2xl animate-rise flex-col rounded-t-[2rem] bg-cream shadow-2xl sm:rounded-[2rem]">
+      <div className="relative flex max-h-[88dvh] w-full max-w-[min(42rem,100vw)] min-w-0 animate-rise flex-col rounded-t-[2rem] bg-cream shadow-2xl sm:rounded-[2rem]">
         <div className="flex items-start justify-between gap-4 border-b border-sand p-5 sm:p-6">
           <div>
             <h2 id={labelId} className="text-lg font-semibold">{title}</h2>
@@ -14,8 +14,8 @@ export function Dialog({ title, subtitle, onClose, children, footer, labelId = '
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6">{children}</div>
-        {footer && <div className="flex gap-3 border-t border-sand p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">{footer}</div>}
+        <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-5 sm:p-6">{children}</div>
+        {footer && <div className="flex flex-wrap gap-2 border-t border-sand p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-3 sm:p-6">{footer}</div>}
       </div>
     </div>
   )
