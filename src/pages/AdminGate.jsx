@@ -2,9 +2,10 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Eye, EyeOff, Lock, LogIn, TriangleAlert } from 'lucide-react'
 import { getSession, login, logout } from '../services/adminAuth'
+import { SESSION_EXPIRED } from '../services/adminApi'
 
 // The dashboard code is only downloaded AFTER the server confirms the session.
-const AdminDashboard = lazy(() => import('./AdminDashboard'))
+const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 
 const Centered = ({ children }) => <div className="grid min-h-screen place-items-center bg-cream px-4">{children}</div>
 const Spinner = () => (
@@ -28,9 +29,14 @@ export default function AdminGate() {
       )
       .catch(() => setState({ status: 'error' }))
 
+    // Any admin request that gets 401 (session expired / password changed) → back to login.
+    const expired = () => setState({ status: 'out', configured: true, expired: true })
+    window.addEventListener(SESSION_EXPIRED, expired)
+
     return () => {
       document.title = prev
       meta.remove()
+      window.removeEventListener(SESSION_EXPIRED, expired)
     }
   }, [])
 
@@ -46,10 +52,10 @@ export default function AdminGate() {
         <AdminDashboard onLogout={handleLogout} />
       </Suspense>
     )
-  return <LoginForm configured={state.configured} unreachable={state.status === 'error'} onSuccess={() => setState({ status: 'in' })} />
+  return <LoginForm configured={state.configured} expired={state.expired} unreachable={state.status === 'error'} onSuccess={() => setState({ status: 'in' })} />
 }
 
-function LoginForm({ configured, unreachable, onSuccess }) {
+function LoginForm({ configured, expired, unreachable, onSuccess }) {
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [error, setError] = useState('')
@@ -85,6 +91,9 @@ function LoginForm({ configured, unreachable, onSuccess }) {
           <p className="mt-5 text-lg font-bold tracking-[0.2em]">KIDSLA</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Admin sign in</h1>
 
+          {expired && !unreachable && (
+            <p role="status" className="mt-4 rounded-2xl bg-sand p-3 text-sm text-ink">Your session ended. Please sign in again.</p>
+          )}
           {(unreachable || configured === false) && (
             <p role="alert" className="mt-4 flex gap-2 rounded-2xl bg-blush-light p-3 text-sm text-ink">
               <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose" />

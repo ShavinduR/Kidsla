@@ -5,6 +5,9 @@
 //   ADMIN_SESSION_SECRET  — random string used to sign session cookies (e.g. `openssl rand -hex 32`)
 // Changing either one logs everyone out.
 import crypto from 'node:crypto'
+import { send } from './http.js'
+
+export { send, readJson } from './http.js'
 
 export const COOKIE = 'kidsla_admin'
 const SESSION_HOURS = 8
@@ -57,33 +60,7 @@ export function sessionCookie(req, token) {
   return parts.join('; ')
 }
 
-// ---- tiny response helpers (work in Vercel and in Vite's dev server) ----
-export function send(res, status, body, headers = {}) {
-  res.statusCode = status
-  res.setHeader('Content-Type', 'application/json; charset=utf-8')
-  res.setHeader('Cache-Control', 'no-store')
-  for (const [k, v] of Object.entries(headers)) res.setHeader(k, v)
-  res.end(JSON.stringify(body))
-}
-
-export async function readJson(req) {
-  if (req.body && typeof req.body === 'object') return req.body // Vercel already parsed it
-  let raw = ''
-  for await (const chunk of req) {
-    raw += chunk
-    if (raw.length > 10_000) break
-  }
-  try {
-    return JSON.parse(raw || '{}')
-  } catch {
-    return {}
-  }
-}
-
-/**
- * Guard for future admin endpoints, e.g. inventory import:
- *   if (!requireAdmin(req, res)) return
- */
+/** Guard for admin endpoints:  if (!requireAdmin(req, res)) return */
 export function requireAdmin(req, res) {
   if (isAuthenticated(req)) return true
   send(res, 401, { error: 'Not signed in' })
@@ -94,7 +71,7 @@ export function requireAdmin(req, res) {
 // Best-effort, per server instance (serverless instances don't share memory).
 // For stronger protection add Upstash Redis / Vercel KV — see docs/BACKEND.md.
 const attempts = new Map()
-const clientIp = (req) => String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? '?').split(',')[0].trim()
+export const clientIp = (req) => String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? '?').split(',')[0].trim()
 
 export function lockedFor(req) {
   const a = attempts.get(clientIp(req))

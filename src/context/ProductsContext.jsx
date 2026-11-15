@@ -1,28 +1,33 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { initialProducts } from '../data/products'
 
 const ProductsContext = createContext(null)
 
-// Demo store. Admin edits live in memory only (refresh = reset).
-// Production: fetch from GET /api/products and refetch after a bulk import.
+// Shows the bundled catalogue instantly, then swaps in the live one from MongoDB (/api/products).
+// If the API or database is unavailable, the bundled catalogue simply stays — the shop never goes blank.
 export function ProductsProvider({ children }) {
   const [products, setProducts] = useState(initialProducts)
+  const [source, setSource] = useState('bundled') // bundled | live
 
-  const applyUpdates = useCallback((updates) => {
-    const byId = new Map(updates.map((u) => [u.id, u]))
-    setProducts((prev) =>
-      prev.map((p) => {
-        const u = byId.get(p.id)
-        return u ? { ...p, ...u, stock: { ...p.stock, ...u.stock } } : p
-      }),
-    )
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/products')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.configured && Array.isArray(data.products) && data.products.length) {
+          setProducts(data.products)
+          setSource('live')
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  const reset = useCallback(() => setProducts(initialProducts), [])
-
   const value = useMemo(
-    () => ({ products, getProduct: (id) => products.find((p) => p.id === id), applyUpdates, reset }),
-    [products, applyUpdates, reset],
+    () => ({ products, source, getProduct: (id) => products.find((p) => p.id === id) }),
+    [products, source],
   )
   return <ProductsContext.Provider value={value}>{children}</ProductsContext.Provider>
 }

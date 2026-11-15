@@ -1,6 +1,6 @@
 // Mock catalogue. In production this comes from GET /api/products (MongoDB).
 // Shape stays identical so swapping to the API is a one-line change.
-import { CLOTHING_SIZES } from './sizeGuide'
+import { CLOTHING_SIZES } from './sizeGuide.js'
 
 const u = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=80`
 

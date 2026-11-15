@@ -7,7 +7,7 @@ import { useCart } from '../context/CartContext'
 import { DISTRICTS, PAYMENT_METHODS, deliveryFeeFor, DELIVERY_FEES } from '../data/site'
 import { formatLKR } from '../utils/format'
 import { generateOrderId } from '../utils/orderId'
-import { buildOrderMessage, openWhatsApp, waLink } from '../utils/whatsapp'
+import { buildOrderMessage, prepareWhatsAppWindow, waLink } from '../utils/whatsapp'
 import { track } from '../utils/analytics'
 import useLockBody from '../utils/useLockBody'
 
@@ -28,6 +28,8 @@ export default function CartDrawer() {
   const [form, setForm] = useState(loadForm)
   const [errors, setErrors] = useState({})
   const [placed, setPlaced] = useState(null) // { orderId, url, total } after checkout
+  const [submitting, setSubmitting] = useState(false)
+  const [orderError, setOrderError] = useState(null) // { message, problems[] } from the server
   const panel = useRef(null)
 
   useLockBody(isOpen)
@@ -57,7 +59,7 @@ export default function CartDrawer() {
     setErrors((er) => ({ ...er, [field]: undefined }))
   }
 
-  const handleCheckout = (e) => {
+  const handleCheckout = async (e) => {
     e.preventDefault()
     const next = {}
     if (form.name.trim().length < 2) next.name = 'Please enter your name'
@@ -70,25 +72,54 @@ export default function CartDrawer() {
       return
     }
 
-    const orderId = generateOrderId()
-    const message = buildOrderMessage({
-      orderId,
-      customer: form,
-      lines,
+    if (submitting) return
+    setSubmitting(true)
+    setOrderError(null)
+    localStorage.setItem(FORM_KEY, JSON.stringify(form))
+    const paymentLabel = PAYMENT_METHODS.find((p) => p.id === form.payment).label
+    const wa = prepareWhatsAppWindow() // must happen inside the tap, before any await
+
+    // 1) Save the order: the server re-checks stock, recomputes prices and issues the order number.
+    let order = null
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer: form,
+          items: lines.map((l) => ({ id: l.id, size: l.size, color: l.color, qty: l.qty })),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) order = data
+      else if ([400, 409, 429].includes(res.status)) {
+        // Something the customer needs to fix (e.g. an item just sold out) — don't send to WhatsApp.
+        wa.cancel()
+        setOrderError({ message: data.error ?? 'Please check your order.', problems: data.problems ?? [] })
+        setSubmitting(false)
+        return
+      }
+    } catch {
+      /* offline / server down → fall back below */
+    }
+
+    // 2) Never lose a sale: if the server is unreachable or not set up, still send via WhatsApp.
+    order ??= {
+      orderId: generateOrderId(),
+      items: lines.map((l) => ({ productId: l.id, title: l.product.title, size: l.size, color: l.color, qty: l.qty, price: l.product.price })),
       subtotal,
       deliveryFee,
       total,
-      paymentLabel: PAYMENT_METHODS.find((p) => p.id === form.payment).label,
-    })
-    const url = waLink(message)
+    }
 
-    localStorage.setItem(FORM_KEY, JSON.stringify(form))
-    track('InitiateCheckout', { value: total, num_items: count, content_ids: lines.map((l) => l.id) })
+    const url = waLink(buildOrderMessage({ ...order, customer: form, paymentLabel }))
+    track('InitiateCheckout', { value: order.total, num_items: count, content_ids: lines.map((l) => l.id) })
 
     // Keep a receipt BEFORE clearing so the customer can re-open WhatsApp if it didn't launch.
-    setPlaced({ orderId, url, total, items: count })
-    openWhatsApp(url)
+    setPlaced({ orderId: order.orderId, url, total: order.total, items: count })
+    wa.go(url)
     clearCart()
+    setSubmitting(false)
   }
 
   if (!isOpen) return null
@@ -127,7 +158,7 @@ export default function CartDrawer() {
                         <h3 className="text-sm leading-snug font-medium">{l.product.title}</h3>
                         <button
                           type="button"
-                          onClick={() => removeItem(l.key)}
+                          onClick={() => { removeItem(l.key); setOrderError(null) }}
                           className="-mt-1.5 -mr-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-blush-light hover:text-rose"
                           aria-label={`Remove ${l.product.title}`}
                         >
@@ -137,11 +168,11 @@ export default function CartDrawer() {
                       <p className="mt-0.5 text-sm text-ink-soft">{l.color} · {l.size}</p>
                       <div className="mt-auto flex items-center justify-between pt-2">
                         <div className="flex items-center rounded-full bg-white ring-1 ring-sand-dark">
-                          <button type="button" onClick={() => setQty(l.key, l.qty - 1)} className="flex h-9 w-9 items-center justify-center rounded-l-full hover:bg-sand" aria-label="Decrease quantity">
+                          <button type="button" onClick={() => { setQty(l.key, l.qty - 1); setOrderError(null) }} className="flex h-9 w-9 items-center justify-center rounded-l-full hover:bg-sand" aria-label="Decrease quantity">
                             <Minus className="h-3.5 w-3.5" />
                           </button>
                           <span className="w-6 text-center text-sm font-semibold">{l.qty}</span>
-                          <button type="button" onClick={() => setQty(l.key, l.qty + 1)} className="flex h-9 w-9 items-center justify-center rounded-r-full hover:bg-sand" aria-label="Increase quantity">
+                          <button type="button" onClick={() => { setQty(l.key, l.qty + 1); setOrderError(null) }} className="flex h-9 w-9 items-center justify-center rounded-r-full hover:bg-sand" aria-label="Increase quantity">
                             <Plus className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -211,8 +242,20 @@ export default function CartDrawer() {
                   <dd className="text-lg font-semibold">{formatLKR(total)}</dd>
                 </div>
               </dl>
-              <button type="submit" className="mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-full bg-wa font-semibold text-white shadow-lg shadow-wa/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-wa-dark hover:shadow-xl active:translate-y-0">
-                <MessageCircle className="h-5 w-5" /> Place Order via WhatsApp
+              {orderError && (
+                <div role="alert" className="mt-3 rounded-2xl bg-rose/10 p-3 text-sm text-ink ring-1 ring-rose/30">
+                  <p className="font-semibold text-rose">{orderError.message}</p>
+                  {orderError.problems.length > 0 && (
+                    <ul className="mt-1 space-y-0.5">
+                      {orderError.problems.map((p) => (
+                        <li key={`${p.id}-${p.size}`}>• {p.title} ({p.size}): {p.reason}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              <button type="submit" disabled={submitting} className="mt-4 flex h-13 w-full disabled:cursor-wait disabled:opacity-70 items-center justify-center gap-2 rounded-full bg-wa font-semibold text-white shadow-lg shadow-wa/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-wa-dark hover:shadow-xl active:translate-y-0">
+                <MessageCircle className="h-5 w-5" /> {submitting ? 'Placing order…' : 'Place Order via WhatsApp'}
               </button>
               <p className="mt-2.5 flex items-center justify-center gap-1.5 text-xs text-ink-soft">
                 <RotateCcw className="h-3.5 w-3.5" /> 3-day exchanges · We confirm every order on WhatsApp

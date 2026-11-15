@@ -15,7 +15,8 @@ npm run build
 | Size guide (reviewed measurements + notes) | `src/data/sizeGuide.js` |
 | Products, stock per size, images | `src/data/products.js` |
 | Checkout + WhatsApp message | `src/components/CartDrawer.jsx`, `src/utils/whatsapp.js` |
-| Admin import/export (mock → Node backend) | `src/pages/AdminDashboard.jsx`, `src/services/inventoryApi.js`, `docs/BACKEND.md` |
+| Admin (inventory, orders, Excel import/export) | `src/pages/admin/`, `src/services/adminApi.js` |
+| Server API (Vercel Functions) + MongoDB | `api/`, `shared/`, `docs/BACKEND.md` |
 | SEO / Open Graph | `index.html`, `public/og-image.png` |
 | Meta Pixel + Vercel Analytics | `src/utils/analytics.js`, `src/App.jsx` |
 
@@ -23,7 +24,7 @@ npm run build
 - Only **Clothing** with `status: 'active'` can be ordered. Toys & Educational show **Coming Soon** + "Notify Me on WhatsApp".
 - Sold-out sizes are disabled; quantities are capped to stock.
 - Delivery: Colombo **LKR 350**, all other districts **LKR 400**.
-- Checkout generates an order ID (`KD-YYMM-NNN`), opens WhatsApp, then clears the cart. A confirmation screen keeps a "re-open WhatsApp" link in case the app didn't launch.
+- Checkout saves the order (server-checked stock and prices, sequential `KD-YYMM-NNN`), opens WhatsApp, then clears the cart. A confirmation screen keeps a "re-open WhatsApp" link in case the app didn't launch.
 
 ## Vercel setup
 1. **Environment variables** (Project → Settings → Environment Variables):
@@ -47,4 +48,12 @@ Password-protected by Vercel Functions in `/api` (`login`, `logout`, `session`):
 
 Changing either value signs everyone out. Locally, put them in `.env.local`; `npm run dev` serves `/api` too.
 
-> Inventory changes in the admin are still demo-only (in-memory) until the database backend exists — new API routes should call `requireAdmin(req, res)` from `api/_lib/auth.js`.
+## Database (MongoDB Atlas)
+1. Create a free cluster at https://cloud.mongodb.com (M0 Free, region near Sri Lanka, e.g. Mumbai `ap-south-1`).
+2. **Database Access** → add a database user with a strong password (role: *Read and write to any database*).
+3. **Network Access** → add `0.0.0.0/0` (Vercel's servers have changing IPs; the user/password still protects the database).
+4. **Connect → Drivers** → copy the connection string and put your DB user's password into it.
+5. Vercel → Settings → Environment Variables: `MONGODB_URI` = that string (optional `MONGODB_DB`, default `kidsla`). Redeploy.
+6. Open `/admin` → **Load starter catalogue**.
+
+Locally: add `MONGODB_URI` to `.env.local`. Without it the shop runs on the catalogue bundled in `src/data/products.js`.
