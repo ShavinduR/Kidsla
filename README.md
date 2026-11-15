@@ -31,9 +31,38 @@ npm run build
 | `RESEND_API_KEY` + `ALERT_EMAIL_TO` | recommended | Email alerts: new orders, server errors, login attacks ([resend.com](https://resend.com), free tier) |
 | `ALERT_EMAIL_FROM` | optional | Sender once you verify your domain in Resend (default: Resend's test sender) |
 | `CLOUDINARY_URL` | recommended | Photo uploads: `cloudinary://KEY:SECRET@CLOUD` from Cloudinary → Dashboard ([cloudinary.com](https://cloudinary.com), free tier) |
+| `PAYHERE_MERCHANT_ID` + `PAYHERE_MERCHANT_SECRET` | for online payments | From PayHere → Settings → Domains & Credentials (the secret is generated **for your domain**) |
+| `PAYHERE_MODE` | for online payments | `sandbox` (default, test cards) or `live` |
 | `VITE_SENTRY_DSN` | optional | Front-end error tracking ([sentry.io](https://sentry.io), free tier) |
 | `VITE_META_PIXEL_ID` | optional | Meta Pixel for ads |
 | `MONGODB_DB` | optional | Database name (default `kidsla`) |
+
+## Online payments (PayHere)
+1. Create a **sandbox** account at https://sandbox.payhere.lk → Settings → Domains & Credentials → add your site's domain
+   (e.g. `kidsla.vercel.app`) → copy the **Merchant ID** and the **Merchant Secret** generated for that domain.
+2. In Vercel set `PAYHERE_MERCHANT_ID`, `PAYHERE_MERCHANT_SECRET`, `PAYHERE_MODE=sandbox`, and make sure `VITE_SITE_URL`
+   is your real **https** address (PayHere calls `https://<site>/api/payhere/notify`; it can't reach localhost). Redeploy.
+3. `/admin` → Settings should say "PayHere connected … SANDBOX". Place an order with **Pay Online** and a PayHere sandbox
+   test card. The order should turn **Confirmed · Paid online** and you get a "💳 Paid order" email.
+4. Going live: get your live PayHere account approved, add the domain there, switch the three variables to the live
+   values with `PAYHERE_MODE=live`, redeploy, and do one small real payment (refund it in PayHere afterwards).
+
+How it's kept safe:
+- The server signs every payment request (the secret never reaches the browser) and **only PayHere's signed
+  server-to-server notification** marks an order paid. The page the customer returns to proves nothing on its own.
+- The paid amount must equal the order total exactly; duplicates are ignored; card numbers are never stored.
+- Online orders hold stock for 60 min (Settings). A payment arriving later re-takes the stock, or the order is flagged
+  for a refund if it sold out. Chargebacks and mismatches are flagged in Orders and emailed to you.
+- Refunds are done in your PayHere account (the admin reminds you when you cancel a paid order).
+
+## Settings & activity (`/admin`)
+- **Settings**: delivery fees, free-delivery threshold, which payment methods are on, bank details shown to bank-transfer
+  customers, and how long unpaid orders hold stock. The server prices every order from these. Changes reach the shop
+  within about a minute.
+- **Activity**: every sign-in, product/price/stock change, import, order confirm/cancel, settings change and payment
+  event, kept for a year.
+- Database changes are versioned migrations (`api/_lib/migrations.js`); they run automatically after a deploy, or by hand
+  with `MONGODB_URI=… npm run db:migrate`.
 
 ## Managing products (`/admin` → Inventory)
 - **Add product** / **Details**: title, link name, description, category, Girls/Boys, material, price, status, badge,
@@ -107,7 +136,7 @@ Exports include a **`version`** column. Don't edit it. A row is only imported if
 (sales, edits). Changed rows are skipped and listed, so old spreadsheets can never put sold stock back. Just export again.
 
 ## Tests
-49 end-to-end tests (real browser, real API, real MongoDB) run on every push via GitHub Actions (`.github/workflows/ci.yml`).
+62 end-to-end tests (real browser, real API, real MongoDB) run on every push via GitHub Actions (`.github/workflows/ci.yml`).
 Locally (needs Docker):
 ```bash
 docker run -d --name kidsla-mongo -p 27017:27017 mongo:7 --replSet rs0

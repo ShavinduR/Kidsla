@@ -24,7 +24,8 @@ export async function db() {
 }
 export async function resetDb() {
   const d = await db()
-  for (const c of await d.listCollections().toArray()) await d.collection(c.name).deleteMany({})
+  // Keep `_migrations`: the server only checks it once per process, and the indexes survive deleteMany.
+  for (const c of await d.listCollections().toArray()) if (c.name !== '_migrations') await d.collection(c.name).deleteMany({})
 }
 export const product = async (id) => (await db()).collection('products').findOne({ _id: id })
 
@@ -49,7 +50,7 @@ export async function seed() {
   return a
 }
 
-export const customer = (name = 'Test Parent') => ({ name, address: '12 Lake Road, Kandy', district: 'Kandy', payment: 'cod' })
+export const customer = (name = 'Test Parent', extra = {}) => ({ name, phone: '077 123 4567', address: '12 Lake Road, Kandy', district: 'Kandy', payment: 'cod', ...extra })
 
 export const placeOrder = async (ctx, items, cust = customer()) => ctx.post('/api/orders', { data: { customer: cust, items } })
 

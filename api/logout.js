@@ -3,6 +3,7 @@
 import { destroyAllSessions, destroySession, isAuthenticated, sessionCookie } from './_lib/auth.js'
 import { handle, readJson, send } from './_lib/http.js'
 import { isDbConfigured } from './_lib/db.js'
+import { audit } from './_lib/audit.js'
 
 export default handle(['POST'], async (req, res) => {
   const clear = { 'Set-Cookie': sessionCookie(req, null) }
@@ -11,6 +12,7 @@ export default handle(['POST'], async (req, res) => {
   if (body.all === true) {
     if (!(await isAuthenticated(req))) return send(res, 401, { error: 'Not signed in' })
     const ended = await destroyAllSessions()
+    await audit('admin', 'admin.signout_all', null, { ended })
     return send(res, 200, { authenticated: false, ended }, clear)
   }
   await destroySession(req)

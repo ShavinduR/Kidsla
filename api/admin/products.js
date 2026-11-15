@@ -3,6 +3,7 @@
 //  • Edits carry the version they were based on: a stale edit gets 409 + the latest values (audit H1).
 //  • Products are never deleted: status "archived" removes them from the shop but keeps old orders intact.
 import { requireAdmin } from '../_lib/auth.js'
+import { audit } from '../_lib/audit.js'
 import { handle, readJson, send } from '../_lib/http.js'
 import { fromDoc, getDb, isDbConfigured } from '../_lib/db.js'
 import { loadProducts } from '../_lib/catalog.js'
@@ -42,12 +43,14 @@ const describe = (before, after) => {
   for (const s of new Set([...Object.keys(before.stock ?? {}), ...Object.keys(after.stock ?? {})]))
     if ((before.stock?.[s] ?? 0) !== (after.stock?.[s] ?? 0)) out.push(`${s} stock ${before.stock?.[s] ?? 0} → ${after.stock?.[s] ?? 0}`)
   const labels = { title: 'title', slug: 'link', description: 'description', category: 'category', gender: 'girls/boys', material: 'material', badge: 'badge', sizes: 'sizes', colors: 'colours', images: 'photos' }
-  for (const [k, label] of Object.entries(labels)) if (JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null)) out.push(`${label} updated`)
+  const norm = (v) => JSON.stringify(v === undefined || v === '' ? null : v) // missing badge == '' badge
+  for (const [k, label] of Object.entries(labels)) if (norm(before[k]) !== norm(after[k])) out.push(`${label} updated`)
   return out
 }
 
 export default handle(['GET', 'POST', 'PATCH'], async (req, res) => {
-  if (!(await requireAdmin(req, res))) return
+  const admin = await requireAdmin(req, res)
+  if (!admin) return
   if (!isDbConfigured()) return send(res, 200, { configured: false, products: [] })
   const db = await getDb()
   const products = db.collection('products')
@@ -81,6 +84,7 @@ export default handle(['GET', 'POST', 'PATCH'], async (req, res) => {
       updatedAt: now,
     }
     await products.insertOne(doc)
+    await audit(admin, 'product.create', doc._id, { title: doc.title })
     return send(res, 201, { product: fromDoc(doc) })
   }
 
@@ -127,5 +131,6 @@ export default handle(['GET', 'POST', 'PATCH'], async (req, res) => {
     return conflict()
   }
   const [saved] = await loadProducts({ _id: body.id })
+  await audit(admin, next.status === 'archived' && product.status !== 'archived' ? 'product.archive' : 'product.update', product.id, { changed })
   send(res, 200, { product: saved, changed })
 })

@@ -1,6 +1,7 @@
 // Admin: list orders and move them between statuses. Stock handling lives in _lib/orders.js
 // (transactions): confirm = sold, cancel = stock back, pending orders expire after 24 h.
 import { requireAdmin } from '../_lib/auth.js'
+import { audit } from '../_lib/audit.js'
 import { handle, query, readJson, send } from '../_lib/http.js'
 import { getDb, isDbConfigured } from '../_lib/db.js'
 import { OrderError, changeOrderStatus, releaseExpired } from '../_lib/orders.js'
@@ -12,7 +13,8 @@ const countByStatus = async (orders) =>
   Object.fromEntries((await orders.aggregate([{ $group: { _id: '$status', n: { $sum: 1 } } }]).toArray()).map((c) => [c._id, c.n]))
 
 export default handle(['GET', 'PATCH'], async (req, res) => {
-  if (!(await requireAdmin(req, res))) return
+  const admin = await requireAdmin(req, res)
+  if (!admin) return
   if (!isDbConfigured()) return send(res, 200, { configured: false, orders: [] })
   const orders = (await getDb()).collection('orders')
 
@@ -31,7 +33,9 @@ export default handle(['GET', 'PATCH'], async (req, res) => {
   if (typeof id !== 'string' || !ORDER_ID.test(id) || !['confirmed', 'cancelled'].includes(status))
     return send(res, 400, { error: 'Invalid request' })
   try {
-    send(res, 200, await changeOrderStatus(id, status))
+    const result = await changeOrderStatus(id, status)
+    await audit(admin, status === 'confirmed' ? 'order.confirm' : 'order.cancel', id, { restocked: result.restocked })
+    send(res, 200, result)
   } catch (err) {
     if (err instanceof OrderError) return send(res, err.status, { error: err.message })
     throw err

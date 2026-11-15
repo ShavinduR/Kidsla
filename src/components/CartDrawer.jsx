@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Banknote, CircleCheck, ExternalLink, Info, Landmark, MessageCircle, Minus, Plus, RotateCcw, ShoppingBag, Trash2, X,
+  Banknote, CircleCheck, CreditCard, ExternalLink, Info, Landmark, MessageCircle, Minus, Plus, RotateCcw, ShoppingBag, Trash2, X,
 } from 'lucide-react'
 import SmartImage from './SmartImage'
 import { useCart } from '../context/CartContext'
-import { DISTRICTS, PAYMENT_METHODS, deliveryFeeFor, DELIVERY_FEES } from '../data/site'
+import { DISTRICTS, PAYMENT_METHODS, deliveryFeeFor, normalizePhone } from '../data/site'
+import { useSettings } from '../context/SettingsContext'
+import { LAST_ORDER_KEY, submitToPayHere } from '../utils/payhere'
 import { formatLKR } from '../utils/format'
 import { generateOrderId } from '../utils/orderId'
 import { buildOrderMessage, prepareWhatsAppWindow, waLink } from '../utils/whatsapp'
@@ -12,8 +14,8 @@ import { track } from '../utils/analytics'
 import useLockBody from '../utils/useLockBody'
 
 const FORM_KEY = 'kidsla-customer-v2'
-const EMPTY = { name: '', address: '', district: '', payment: 'cod' }
-const PAY_ICONS = { cod: Banknote, bank: Landmark }
+const EMPTY = { name: '', phone: '', email: '', address: '', district: '', payment: 'cod' }
+const PAY_ICONS = { cod: Banknote, bank: Landmark, online: CreditCard }
 
 const loadForm = () => {
   try {
@@ -51,8 +53,13 @@ export default function CartDrawer() {
     return () => window.removeEventListener('keydown', onKey)
   }, [isOpen, handleClose])
 
-  const deliveryFee = deliveryFeeFor(form.district)
+  const settings = useSettings()
+  const methods = PAYMENT_METHODS.filter((m) => settings.payments[m.id])
+  const payment = methods.some((m) => m.id === form.payment) ? form.payment : methods[0]?.id
+  const online = payment === 'online'
+  const deliveryFee = deliveryFeeFor(form.district, subtotal, settings)
   const total = subtotal + deliveryFee
+  const toFree = settings.freeDeliveryOver > 0 ? settings.freeDeliveryOver - subtotal : 0
 
   const setField = (field) => (e) => {
     setForm((f) => ({ ...f, [field]: e.target.value }))
@@ -63,6 +70,9 @@ export default function CartDrawer() {
     e.preventDefault()
     const next = {}
     if (form.name.trim().length < 2) next.name = 'Please enter your name'
+    if (!normalizePhone(form.phone)) next.phone = 'Please enter a valid phone number, e.g. 077 123 4567'
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(form.email.trim())) next.email = 'Please check your email address'
+    else if (online && !form.email.trim()) next.email = 'Needed for your payment receipt'
     if (form.address.trim().length < 10) next.address = 'Please enter your full address (house no, street, city)'
     if (!form.district) next.district = 'Please choose your district'
     setErrors(next)
@@ -76,8 +86,10 @@ export default function CartDrawer() {
     setSubmitting(true)
     setOrderError(null)
     localStorage.setItem(FORM_KEY, JSON.stringify(form))
-    const paymentLabel = PAYMENT_METHODS.find((p) => p.id === form.payment).label
-    const wa = prepareWhatsAppWindow() // must happen inside the tap, before any await
+    const paymentLabel = PAYMENT_METHODS.find((p) => p.id === payment).label
+    const customer = { ...form, payment }
+    // Cash / bank orders continue in WhatsApp; online payments go to PayHere instead.
+    const wa = online ? null : prepareWhatsAppWindow() // must happen inside the tap, before any await
 
     // 1) Save the order: the server re-checks stock, recomputes prices and issues the order number.
     let order = null
@@ -86,7 +98,7 @@ export default function CartDrawer() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customer: form,
+          customer,
           items: lines.map((l) => ({ id: l.id, size: l.size, color: l.color, qty: l.qty })),
         }),
       })
@@ -94,13 +106,27 @@ export default function CartDrawer() {
       if (res.ok) order = data
       else if ([400, 409, 429].includes(res.status)) {
         // Something the customer needs to fix (e.g. an item just sold out) — don't send to WhatsApp.
-        wa.cancel()
+        wa?.cancel()
+        if (data.field) setErrors({ [data.field]: data.error })
         setOrderError({ message: data.error ?? 'Please check your order.', problems: data.problems ?? [] })
         setSubmitting(false)
         return
       }
     } catch {
       /* offline / server down → fall back below */
+    }
+
+    if (online) {
+      if (!order?.payhere) {
+        setOrderError({ message: 'Online payment isn’t available right now. Please try again, or choose Cash on Delivery.', problems: [] })
+        setSubmitting(false)
+        return
+      }
+      track('InitiateCheckout', { value: order.total, num_items: count, content_ids: lines.map((l) => l.id) })
+      localStorage.setItem(LAST_ORDER_KEY, JSON.stringify({ id: order.orderId, t: order.accessToken }))
+      clearCart() // the items are held for this order while the customer pays
+      submitToPayHere(order.payhere)
+      return
     }
 
     // 2) Never lose a sale: if the server is unreachable or not set up, still send via WhatsApp.
@@ -112,11 +138,11 @@ export default function CartDrawer() {
       total,
     }
 
-    const url = waLink(buildOrderMessage({ ...order, customer: form, paymentLabel }))
+    const url = waLink(buildOrderMessage({ ...order, customer: { ...customer, phone: normalizePhone(form.phone) }, paymentLabel }))
     track('InitiateCheckout', { value: order.total, num_items: count, content_ids: lines.map((l) => l.id) })
 
     // Keep a receipt BEFORE clearing so the customer can re-open WhatsApp if it didn't launch.
-    setPlaced({ orderId: order.orderId, url, total: order.total, items: count, holdHours: order.holdHours })
+    setPlaced({ orderId: order.orderId, url, total: order.total, items: count, holdHours: order.holdHours, bankDetails: order.bankDetails })
     wa.go(url)
     clearCart()
     setSubmitting(false)
@@ -191,16 +217,22 @@ export default function CartDrawer() {
                   <Field id="co-name" label="Full Name" error={errors.name}>
                     <input id="co-name" type="text" value={form.name} onChange={setField('name')} autoComplete="name" placeholder="e.g. Nimali Perera" className={inputClass(errors.name)} aria-invalid={!!errors.name} />
                   </Field>
+                  <Field id="co-phone" label="Phone (WhatsApp)" error={errors.phone}>
+                    <input id="co-phone" type="tel" inputMode="tel" value={form.phone} onChange={setField('phone')} autoComplete="tel" placeholder="077 123 4567" className={inputClass(errors.phone)} aria-invalid={!!errors.phone} />
+                  </Field>
+                  <Field id="co-email" label={online ? 'Email (for your receipt)' : 'Email (optional)'} error={errors.email}>
+                    <input id="co-email" type="email" inputMode="email" value={form.email} onChange={setField('email')} autoComplete="email" placeholder="you@example.com" className={inputClass(errors.email)} aria-invalid={!!errors.email} />
+                  </Field>
                   <Field id="co-address" label="Delivery Address" error={errors.address}>
                     <textarea id="co-address" value={form.address} onChange={setField('address')} autoComplete="street-address" rows={3} placeholder="House no, street, city" className={`${inputClass(errors.address)} resize-none`} aria-invalid={!!errors.address} />
                   </Field>
                   <Field id="co-district" label="District" error={errors.district}>
                     <select id="co-district" value={form.district} onChange={setField('district')} className={`${inputClass(errors.district)} appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 fill=%22none%22 stroke=%22%233A3631%22 stroke-width=%222%22><path d=%22m4 6 4 4 4-4%22/></svg>')] bg-[length:16px] bg-[right_1rem_center] bg-no-repeat pr-10`} aria-invalid={!!errors.district}>
                       <option value="" disabled>Select your district</option>
-                      <optgroup label={`Colombo — ${formatLKR(DELIVERY_FEES.colombo)} delivery`}>
+                      <optgroup label={`Colombo — ${formatLKR(settings.deliveryFees.colombo)} delivery`}>
                         <option value="Colombo">Colombo</option>
                       </optgroup>
-                      <optgroup label={`Outstation — ${formatLKR(DELIVERY_FEES.outstation)} delivery`}>
+                      <optgroup label={`Outstation — ${formatLKR(settings.deliveryFees.outstation)} delivery`}>
                         {DISTRICTS.filter((d) => d !== 'Colombo').map((d) => <option key={d} value={d}>{d}</option>)}
                       </optgroup>
                     </select>
@@ -208,10 +240,10 @@ export default function CartDrawer() {
 
                   <div role="radiogroup" aria-label="Payment method">
                     <span className="mb-1.5 block text-sm font-medium text-ink">Payment Method</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      {PAYMENT_METHODS.map((m) => {
+                    <div className={`grid gap-2 ${methods.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
+                      {methods.map((m) => {
                         const Icon = PAY_ICONS[m.id]
-                        const on = form.payment === m.id
+                        const on = payment === m.id
                         return (
                           <label key={m.id} className={`relative flex cursor-pointer flex-col gap-1 rounded-2xl p-3.5 transition-all ${on ? 'bg-white ring-2 ring-sage-dark' : 'bg-white/60 ring-1 ring-sand-dark hover:ring-ink-soft'}`}>
                             <input type="radio" name="payment" value={m.id} checked={on} onChange={setField('payment')} className="sr-only" />
@@ -235,8 +267,11 @@ export default function CartDrawer() {
                 <div className="flex justify-between"><dt className="text-ink-soft">Subtotal</dt><dd className="font-medium">{formatLKR(subtotal)}</dd></div>
                 <div className="flex justify-between">
                   <dt className="text-ink-soft">Delivery{form.district ? ` (${form.district === 'Colombo' ? 'Colombo' : 'Outstation'})` : ''}</dt>
-                  <dd className="font-medium">{form.district ? formatLKR(deliveryFee) : <span className="text-ink-soft">Select district</span>}</dd>
+                  <dd className="font-medium">{form.district ? (deliveryFee ? formatLKR(deliveryFee) : <span className="text-sage-dark">FREE</span>) : <span className="text-ink-soft">Select district</span>}</dd>
                 </div>
+                {toFree > 0 && (
+                  <p className="text-xs text-sage-dark">Add {formatLKR(toFree)} more for free delivery</p>
+                )}
                 <div className="flex justify-between border-t border-sand pt-2 text-base">
                   <dt className="font-semibold">Total</dt>
                   <dd className="text-lg font-semibold">{formatLKR(total)}</dd>
@@ -254,9 +289,15 @@ export default function CartDrawer() {
                   )}
                 </div>
               )}
-              <button type="submit" disabled={submitting} className="mt-4 flex h-13 w-full disabled:cursor-wait disabled:opacity-70 items-center justify-center gap-2 rounded-full bg-wa font-semibold text-white shadow-lg shadow-wa/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-wa-dark hover:shadow-xl active:translate-y-0">
-                <MessageCircle className="h-5 w-5" /> {submitting ? 'Placing order…' : 'Place Order via WhatsApp'}
-              </button>
+              {online ? (
+                <button type="submit" disabled={submitting} className="mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-full bg-ink font-semibold text-cream shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:bg-sage-dark disabled:cursor-wait disabled:opacity-70">
+                  <CreditCard className="h-5 w-5" /> {submitting ? 'Opening secure payment…' : `Pay ${formatLKR(total)} securely`}
+                </button>
+              ) : (
+                <button type="submit" disabled={submitting} className="mt-4 flex h-13 w-full disabled:cursor-wait disabled:opacity-70 items-center justify-center gap-2 rounded-full bg-wa font-semibold text-white shadow-lg shadow-wa/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-wa-dark hover:shadow-xl active:translate-y-0">
+                  <MessageCircle className="h-5 w-5" /> {submitting ? 'Placing order…' : 'Place Order via WhatsApp'}
+                </button>
+              )}
               <p className="mt-2.5 flex items-center justify-center gap-1.5 text-xs text-ink-soft">
                 <RotateCcw className="h-3.5 w-3.5" /> 3-day exchanges · We confirm every order on WhatsApp
               </p>
@@ -280,6 +321,13 @@ function OrderPlaced({ placed, onDone }) {
       <p className="mt-4 max-w-xs text-sm leading-relaxed text-ink-soft">
         Just press <strong className="text-ink">Send</strong> in WhatsApp. We’ll confirm your order and delivery shortly.
       </p>
+      {placed.bankDetails && (
+        <div className="mt-3 w-full max-w-xs rounded-2xl bg-white p-4 text-left text-sm ring-1 ring-sand-dark">
+          <p className="font-semibold">Bank transfer details</p>
+          <p className="mt-1 whitespace-pre-line text-ink-soft">{placed.bankDetails}</p>
+          <p className="mt-2 text-xs text-ink-soft">Use your order ID <strong className="text-ink">{placed.orderId}</strong> as the reference, then send the receipt on WhatsApp.</p>
+        </div>
+      )}
       {placed.holdHours && (
         <p className="mt-3 max-w-xs rounded-2xl bg-sage-light/70 px-4 py-2.5 text-sm text-sage-dark">
           We’re holding your items for <strong>{placed.holdHours} hours</strong> so nobody else can buy them.

@@ -5,6 +5,10 @@ Everything server-side lives in `/api` (Vercel deploys each file as a function) 
 | Endpoint | Who | What |
 |---|---|---|
 | `GET /api/products` | public | Live catalogue (hidden products excluded). CDN-cached 30 s. |
+| `GET /api/settings` | public | Delivery fees, enabled payment methods, bank details (CDN-cached 60 s). |
+| `GET /api/orders/status?id&t`, `POST /api/orders/pay` | customer (private token) | Payment result page; retry an online payment. No personal data returned. |
+| `POST /api/payhere/notify` | PayHere | Signed server-to-server payment result. Verified (md5sig, merchant, amount), idempotent (`payments` collection). |
+| `GET/PATCH /api/admin/settings`, `GET /api/admin/activity` | admin | Shop settings (version-checked); audit log. |
 | `POST /api/orders` | public | Saves a checkout as **pending**. Server re-checks stock and recomputes all prices, then issues `KD-YYMM-NNN` (sequential per month, Sri Lanka time). |
 | `GET/POST/PATCH /api/admin/products` | admin | List all / create / edit (any field, version-checked). Validated with `shared/productSchema.js`. |
 | `POST /api/admin/upload-signature` | admin | Short-lived Cloudinary signature; the browser uploads directly to Cloudinary. |
@@ -22,6 +26,11 @@ Everything server-side lives in `/api` (Vercel deploys each file as a function) 
 - **products** `{ _id: "KD-G-001", slug (unique), title, description, category, gender, material, price, status: active|coming_soon|hidden|archived, badge, sizes, colors, images (original URLs), stock, reserved, version, position }`
 - **orders** `{ _id: "KD-2611-001", status: pending|confirmed|cancelled, customer, items[], subtotal, deliveryFee, total, createdAt, history[] }`
 - **counters** `{ _id: "order-2611", seq }`: monthly order number
+- **settings** `{ _id: "shop", deliveryFees, freeDeliveryOver, payments, bankDetails, holdHours, onlineHoldMinutes, version }`
+- **payments** `{ _id: "<payment_id>:<status_code>", orderId, status, amount, via, receivedAt }`: every verified PayHere notification
+- **audit_log** `{ at (TTL 1 year), actor, action, target, details }`
+- **_migrations** `{ _id: "004-phase3-indexes", at }`
+- Orders gained `customer.phone` (+94…), optional `customer.email`, `payment { method, status, paymentId, via, paidAt }`, `access` (hash of the customer's private status token) and `needsAttention`.
 
 ## Order & stock rules (`api/_lib/orders.js`, all in MongoDB transactions)
 - `stock.<size>` = units **available** to sell; `reserved.<size>` = units **held** by pending orders.

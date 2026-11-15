@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Database, LogOut, MonitorX, Package, ShoppingBag } from 'lucide-react'
+import { ArrowLeft, Database, History, LogOut, MonitorX, Package, Settings, ShoppingBag } from 'lucide-react'
 import InventoryTab from './InventoryTab'
 import OrdersTab from './OrdersTab'
+import SettingsTab from './SettingsTab'
+import ActivityTab from './ActivityTab'
 import { Notice, Spinner, btn } from './ui'
 import { fetchAdminProducts, fetchOrderCounts, seedCatalogue, signOutAllDevices } from '../../services/adminApi'
 
@@ -94,6 +96,8 @@ export default function AdminDashboard({ onLogout }) {
         toast={toast}
       />
     )
+  else if (tab === 'settings') body = <SettingsTab toast={toast} />
+  else if (tab === 'activity') body = <ActivityTab />
   else body = <OrdersTab toast={toast} onStockChanged={load} onCounts={onCounts} />
 
   const ready = state.status === 'ready' && state.configured && state.products.length > 0
@@ -113,16 +117,18 @@ export default function AdminDashboard({ onLogout }) {
           </button>
         </div>
         {ready && (
-          <nav className="mx-auto flex max-w-7xl gap-1 px-4 sm:px-6 lg:px-8" aria-label="Admin sections">
+          <nav className="no-scrollbar mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 sm:px-6 lg:px-8" aria-label="Admin sections">
             {[
               { id: 'inventory', label: 'Inventory', Icon: Package },
               { id: 'orders', label: 'Orders', Icon: ShoppingBag, badge: pending },
+              { id: 'settings', label: 'Settings', Icon: Settings },
+              { id: 'activity', label: 'Activity', Icon: History },
             ].map(({ id, label, Icon, badge }) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}
                 aria-current={tab === id ? 'page' : undefined}
-                className={`relative inline-flex h-12 items-center gap-2 px-4 text-sm font-semibold transition-colors ${tab === id ? 'text-ink' : 'text-ink-soft hover:text-ink'}`}
+                className={`relative inline-flex h-12 shrink-0 items-center gap-2 px-3 text-sm font-semibold transition-colors sm:px-4 ${tab === id ? 'text-ink' : 'text-ink-soft hover:text-ink'}`}
               >
                 <Icon className="h-4 w-4" /> {label}
                 {badge > 0 && <span className="rounded-full bg-rose px-2 py-0.5 text-xs text-white">{badge}</span>}

@@ -6,6 +6,7 @@ import { createSession, isConfigured, passwordMatches, sessionCookie } from './_
 import { handle, readJson, send } from './_lib/http.js'
 import { hit, ipKey, minutes, peek, reset, RULES } from './_lib/ratelimit.js'
 import { alertLoginAttack } from './_lib/alerts.js'
+import { audit } from './_lib/audit.js'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -24,11 +25,13 @@ export default handle(['POST'], async (req, res) => {
   if (typeof password !== 'string' || !passwordMatches(password)) {
     const [, all] = await Promise.all([hit('loginFailIp', ip), hit('loginFailAll', 'all')])
     if (all.count === RULES.loginFailAll.limit) alertLoginAttack(all.count) // exactly once per hour
+    await audit('login', 'admin.login_failed', null, { ip: ip.slice(0, 8) })
     await sleep(600) // slow down guessing
     return send(res, 401, { error: 'Incorrect password' })
   }
 
   await reset('loginFailIp', ip)
   const token = await createSession(req)
+  await audit('login', 'admin.login', null, { ip: ip.slice(0, 8), device: String(req.headers['user-agent'] ?? '').slice(0, 80) })
   send(res, 200, { authenticated: true }, { 'Set-Cookie': sessionCookie(req, token) })
 })

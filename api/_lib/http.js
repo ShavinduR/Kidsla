@@ -62,7 +62,7 @@ const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS']
  *  3. Sec-Fetch-Site (modern browsers) must not be "cross-site"/"same-site": blocks sibling subdomains.
  * Returns true if allowed; otherwise sends 403/415 and returns false.
  */
-export function guardWrite(req, res, { contentTypes = ['application/json'] } = {}) {
+export function guardWrite(req, res, { contentTypes = ['application/json'], sameOrigin = true } = {}) {
   if (SAFE_METHODS.includes(req.method)) return true
 
   const type = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase()
@@ -70,6 +70,8 @@ export function guardWrite(req, res, { contentTypes = ['application/json'] } = {
     send(res, 415, { error: `Unsupported content type. Expected ${contentTypes.join(' or ')}.` })
     return false
   }
+
+  if (!sameOrigin) return true // server-to-server callbacks (e.g. PayHere) verify a signature instead
 
   const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '').split(',')[0].trim().toLowerCase()
   let originHost = ''
@@ -90,9 +92,9 @@ export function guardWrite(req, res, { contentTypes = ['application/json'] } = {
  * Wraps a handler: method check, write guard (content type + origin), and a JSON 500 on unexpected
  * errors (details logged, never leaked). `contentTypes` applies to non-GET methods only.
  */
-export const handle = (methods, fn, { contentTypes } = {}) => async (req, res) => {
+export const handle = (methods, fn, { contentTypes, sameOrigin } = {}) => async (req, res) => {
   if (!methods.includes(req.method)) return methodNotAllowed(res, methods)
-  if (!guardWrite(req, res, { contentTypes })) return
+  if (!guardWrite(req, res, { contentTypes, sameOrigin })) return
   try {
     await fn(req, res)
   } catch (err) {

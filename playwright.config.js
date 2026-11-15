@@ -14,6 +14,9 @@ export const TEST_ENV = {
   ALERT_EMAIL_TO: 'owner@example.com',
   RESEND_API_URL: 'http://127.0.0.1:4999/emails', // mock Resend server started in tests/global-setup.js
   CRON_SECRET: 'e2e-cron-secret',
+  PAYHERE_MERCHANT_ID: '1211149',
+  PAYHERE_MERCHANT_SECRET: 'e2e-payhere-secret',
+  PAYHERE_MODE: 'sandbox',
   CLOUDINARY_URL: 'cloudinary://123456789012345:e2e-cloudinary-secret@kidsla-test',
   VITE_SITE_URL: 'http://localhost:4173',
   VITE_SENTRY_DSN: '',

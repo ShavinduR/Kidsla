@@ -9,6 +9,7 @@ import { parseCSV } from '../../shared/csv.js'
 import { UnsafeFileError, assertSafeZip } from '../_lib/zipguard.js'
 import { hit, minutes } from '../_lib/ratelimit.js'
 import { getSession } from '../_lib/auth.js'
+import { audit } from '../_lib/audit.js'
 
 const MAX_BYTES = 2_000_000 // uploaded file (compressed)
 const MAX_ROWS = 5000 // data rows read; anything beyond is ignored and reported
@@ -83,5 +84,6 @@ export default handle(['POST'], async (req, res) => {
   if (q.get('dryRun') === '1') return send(res, 200, { dryRun: true, ...report })
 
   const result = await applyUpdates(report.updates)
+  await audit(await getSession(req), 'inventory.import', null, { file: name.slice(0, 60), modified: result.modified, skipped: report.errors.length })
   send(res, 200, { dryRun: false, ...report, ...result })
 }, { contentTypes: ['application/octet-stream'] })

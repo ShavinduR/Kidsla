@@ -3,11 +3,15 @@
 // and HOLDS the stock for 24 hours inside a transaction, so the last unit can't be promised twice.
 import { handle, readJson, send } from './_lib/http.js'
 import { fromDoc, getDb } from './_lib/db.js'
-import { HOLD_HOURS, OrderError, createHeldOrder, releaseExpired } from './_lib/orders.js'
+import { OrderError, createHeldOrder, releaseExpired } from './_lib/orders.js'
 import { hit, ipKey, minutes } from './_lib/ratelimit.js'
 import { alertNewOrder } from './_lib/alerts.js'
 import { isOrderable } from '../src/data/products.js'
-import { DISTRICTS, PAYMENT_METHODS, deliveryFeeFor } from '../src/data/site.js'
+import { DISTRICTS, PAYMENT_METHODS, deliveryFeeFor, normalizePhone } from '../src/data/site.js'
+import { getSettings } from './_lib/settings.js'
+import { checkoutForm, payhereConfig } from './_lib/payhere.js'
+import { siteUrl } from './_lib/catalogPublic.js'
+import crypto from 'node:crypto'
 import { ID_PATTERN } from '../shared/inventory.js'
 
 // Order numbers follow Sri Lanka time: KD-YYMM-NNN, counting up from 001 each month.
@@ -29,16 +33,25 @@ export default handle(['POST'], async (req, res) => {
   const body = await readJson(req)
   if (!body) return send(res, 400, { error: 'Invalid request' })
 
+  const settings = await getSettings()
   const customer = {
     name: str(body.customer?.name, 80),
+    phone: normalizePhone(body.customer?.phone),
+    email: str(body.customer?.email, 120).toLowerCase(),
     address: str(body.customer?.address, 300),
     district: str(body.customer?.district, 40),
     payment: str(body.customer?.payment, 10),
   }
-  if (customer.name.length < 2) return send(res, 400, { error: 'Please enter your name' })
-  if (customer.address.length < 10) return send(res, 400, { error: 'Please enter your full address' })
-  if (!DISTRICTS.includes(customer.district)) return send(res, 400, { error: 'Please choose your district' })
-  if (!PAYMENT_METHODS.some((m) => m.id === customer.payment)) return send(res, 400, { error: 'Please choose a payment method' })
+  if (customer.name.length < 2) return send(res, 400, { error: 'Please enter your name', field: 'name' })
+  if (!customer.phone) return send(res, 400, { error: 'Please enter a valid phone number, e.g. 077 123 4567', field: 'phone' })
+  if (customer.email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(customer.email)) return send(res, 400, { error: 'Please check your email address', field: 'email' })
+  if (customer.address.length < 10) return send(res, 400, { error: 'Please enter your full address', field: 'address' })
+  if (!DISTRICTS.includes(customer.district)) return send(res, 400, { error: 'Please choose your district', field: 'district' })
+  const online = customer.payment === 'online'
+  const enabled = PAYMENT_METHODS.some((m) => m.id === customer.payment) && settings.payments[customer.payment] && (!online || payhereConfig())
+  if (!enabled) return send(res, 400, { error: 'Please choose an available payment method', field: 'payment' })
+  if (online && !customer.email) return send(res, 400, { error: 'Please enter your email for the payment receipt', field: 'email' })
+  if (!customer.email) delete customer.email
 
   const items = Array.isArray(body.items) ? body.items.slice(0, 31) : []
   if (!items.length || items.length > 30) return send(res, 400, { error: 'Your cart is empty or too large' })
@@ -79,14 +92,18 @@ export default handle(['POST'], async (req, res) => {
   }
 
   const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0)
-  const deliveryFee = deliveryFeeFor(customer.district)
+  const deliveryFee = deliveryFeeFor(customer.district, subtotal, settings)
   const total = subtotal + deliveryFee
 
   // Hold the stock + assign the order number in ONE transaction: if any line is short (someone
   // else just bought it), nothing is held and no order number is used up.
+  // A private link token lets this customer (only) check the order's payment status later.
+  const accessToken = crypto.randomBytes(18).toString('base64url')
+  const paymentStatus = online ? 'awaiting' : customer.payment === 'cod' ? 'on_delivery' : 'awaiting_transfer'
   let order
   try {
     order = await createHeldOrder({
+      holdMs: online ? settings.onlineHoldMinutes * 60_000 : settings.holdHours * 3600_000,
       orderIdFor: async (database, session) => {
         const period = yymm()
         const counter = await database
@@ -94,13 +111,34 @@ export default handle(['POST'], async (req, res) => {
           .findOneAndUpdate({ _id: `order-${period}` }, { $inc: { seq: 1 } }, { upsert: true, returnDocument: 'after', session })
         return `KD-${period}-${String(counter.seq).padStart(3, '0')}`
       },
-      doc: { customer, items: lines, subtotal, deliveryFee, total },
+      doc: {
+        customer,
+        items: lines,
+        subtotal,
+        deliveryFee,
+        total,
+        payment: { method: customer.payment, status: paymentStatus },
+        access: crypto.createHash('sha256').update(accessToken).digest('hex'),
+      },
     })
   } catch (err) {
     if (err instanceof OrderError) return send(res, err.status, { error: err.message, ...err.extra })
     throw err
   }
 
-  alertNewOrder(order) // email to the owner, in the background
-  send(res, 201, { orderId: order._id, items: lines, subtotal, deliveryFee, total, holdHours: HOLD_HOURS, expiresAt: order.expiresAt })
+  if (!online) alertNewOrder(order) // online orders alert when PayHere confirms payment
+  send(res, 201, {
+    orderId: order._id,
+    accessToken,
+    items: lines,
+    subtotal,
+    deliveryFee,
+    total,
+    payment: customer.payment,
+    holdHours: online ? undefined : settings.holdHours,
+    holdMinutes: online ? settings.onlineHoldMinutes : undefined,
+    expiresAt: order.expiresAt,
+    bankDetails: customer.payment === 'bank' ? settings.bankDetails : undefined,
+    payhere: online ? checkoutForm(order, { base: siteUrl(req), accessToken }) : undefined,
+  })
 })

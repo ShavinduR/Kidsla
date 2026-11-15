@@ -1,11 +1,13 @@
 import { Clock, MessageCircle, RotateCcw, ShieldCheck, Truck } from 'lucide-react'
-import { ABOUT_TEXT, DELIVERY_FEES, RETURN_POLICY, WHATSAPP_DISPLAY } from '../data/site'
+import { ABOUT_TEXT, RETURN_POLICY, WHATSAPP_DISPLAY } from '../data/site'
+import { useSettings } from '../context/SettingsContext'
 import { formatLKR } from '../utils/format'
 import { waLink } from '../utils/whatsapp'
 
 const YEAR = new Date().getFullYear()
 
 export default function Footer() {
+  const { deliveryFees, freeDeliveryOver } = useSettings()
   return (
     <footer id="about" className="border-t border-sand bg-sand/60">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr] lg:gap-14 lg:px-8">
@@ -35,7 +37,8 @@ export default function Footer() {
             <Truck className="h-4 w-4" /> Delivery
           </h2>
           <p className="mt-3 leading-relaxed text-ink-soft">
-            Colombo {formatLKR(DELIVERY_FEES.colombo)} · Outstation {formatLKR(DELIVERY_FEES.outstation)}
+            Colombo {formatLKR(deliveryFees.colombo)} · Outstation {formatLKR(deliveryFees.outstation)}
+            {freeDeliveryOver > 0 && <><br />Free delivery on orders over {formatLKR(freeDeliveryOver)}</>}
           </p>
         </section>
 

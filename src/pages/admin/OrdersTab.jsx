@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Banknote, Check, Clock, Inbox, Landmark, MapPin, RefreshCw, X } from 'lucide-react'
+import { Banknote, Check, Clock, CreditCard, Inbox, Landmark, Mail, MapPin, Phone, RefreshCw, TriangleAlert, X } from 'lucide-react'
 import { Notice, Spinner, btn } from './ui'
 import { fetchOrders, setOrderStatus } from '../../services/adminApi'
 import { formatLKR } from '../../utils/format'
@@ -18,6 +18,16 @@ const STATUS_STYLE = {
   cancelled: 'bg-sand text-ink-soft',
 }
 const POLL_MS = 30_000
+const PAY_LABEL = {
+  awaiting: 'Waiting for online payment',
+  processing: 'Payment processing',
+  paid: 'Paid online',
+  cancelled: 'Customer cancelled payment',
+  failed: 'Online payment failed',
+  chargedback: 'Charged back!',
+  on_delivery: 'Cash on delivery',
+  awaiting_transfer: 'Awaiting bank transfer',
+}
 const when = (d) =>
   new Date(d).toLocaleString('en-GB', { timeZone: 'Asia/Colombo', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -43,8 +53,12 @@ export default function OrdersTab({ toast, onStockChanged, onCounts }) {
   }, [load])
 
   const act = async (order, status) => {
-    const note = order.status === 'confirmed' || order.stockHeld ? ' Its items go back into stock.' : ''
+    const note =
+      (order.status === 'confirmed' || order.stockHeld ? ' Its items go back into stock.' : '') +
+      (order.payment?.status === 'paid' ? ' It was PAID online: refund it in your PayHere account.' : '')
     if (status === 'cancelled' && !window.confirm(`Cancel order ${order.id}?${note}`)) return
+    if (status === 'confirmed' && order.payment?.method === 'online' && order.payment?.status !== 'paid' &&
+      !window.confirm(`${order.id} has NOT been paid online yet. Confirm it anyway (e.g. the customer paid another way)?`)) return
     setWorking(order.id)
     const res = await setOrderStatus(order.id, status)
     setWorking(null)
@@ -62,8 +76,9 @@ export default function OrdersTab({ toast, onStockChanged, onCounts }) {
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Orders</h1>
           <p className="mt-1 max-w-2xl text-ink-soft">
             Every checkout is saved here as <strong className="text-ink">Pending</strong>. When the customer’s WhatsApp message arrives,
-            match the order ID and press <strong className="text-ink">Confirm</strong>. Items are held for 24 hours from checkout; unconfirmed orders
-            then <strong className="text-ink">expire</strong> and their items go back on sale. Updates every 30 seconds.
+            match the order ID and press <strong className="text-ink">Confirm</strong>. Orders <strong className="text-ink">paid online</strong> are confirmed
+            automatically. Items are held for the time set in Settings; unconfirmed orders then <strong className="text-ink">expire</strong> and their items go
+            back on sale. Updates every 30 seconds.
           </p>
         </div>
         <button onClick={load} className={btn.ghost}><RefreshCw className="h-4 w-4" /> Refresh</button>
@@ -93,7 +108,9 @@ export default function OrdersTab({ toast, onStockChanged, onCounts }) {
         ) : (
           <ul className="grid gap-4 lg:grid-cols-2">
             {data.orders.map((o) => {
-              const PayIcon = o.customer.payment === 'bank' ? Landmark : Banknote
+              const method = o.payment?.method ?? o.customer.payment
+              const PayIcon = method === 'online' ? CreditCard : method === 'bank' ? Landmark : Banknote
+              const payText = PAY_LABEL[o.payment?.status] ?? (method === 'bank' ? 'Bank transfer' : 'Cash on delivery')
               return (
                 <li key={o.id} className="flex flex-col rounded-2xl bg-white p-5 ring-1 ring-sand">
                   <div className="flex items-start justify-between gap-3">
@@ -110,8 +127,22 @@ export default function OrdersTab({ toast, onStockChanged, onCounts }) {
                   <div className="mt-4 space-y-1 text-sm">
                     <p className="font-medium">{o.customer.name}</p>
                     <p className="flex gap-1.5 text-ink-soft"><MapPin className="mt-0.5 h-4 w-4 shrink-0" /> {o.customer.address} · <strong className="font-medium text-ink">{o.customer.district}</strong></p>
-                    <p className="flex items-center gap-1.5 text-ink-soft"><PayIcon className="h-4 w-4" /> {o.customer.payment === 'bank' ? 'Bank transfer' : 'Cash on delivery'}</p>
+                    {o.customer.phone && (
+                      <p className="flex items-center gap-1.5 text-ink-soft">
+                        <Phone className="h-4 w-4" /> <a className="underline-offset-2 hover:underline" href={`https://wa.me/${o.customer.phone.replace('+', '')}`} target="_blank" rel="noreferrer">{o.customer.phone}</a>
+                        {o.customer.email && <><Mail className="ml-2 h-4 w-4" /> <span className="truncate">{o.customer.email}</span></>}
+                      </p>
+                    )}
+                    <p className={`flex items-center gap-1.5 ${o.payment?.status === 'paid' ? 'font-semibold text-sage-dark' : 'text-ink-soft'}`}>
+                      <PayIcon className="h-4 w-4" /> {payText}
+                      {o.payment?.via && <span className="text-xs font-normal text-ink-soft">({o.payment.via}{o.payment.paymentId ? ` · ${o.payment.paymentId}` : ''})</span>}
+                    </p>
                   </div>
+                  {o.needsAttention && (
+                    <p role="alert" className="mt-3 flex gap-2 rounded-xl bg-rose/10 p-3 text-sm font-medium text-rose ring-1 ring-rose/30">
+                      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {o.needsAttention}
+                    </p>
+                  )}
                   <ul className="mt-4 divide-y divide-sand rounded-xl bg-cream text-sm">
                     {o.items.map((it, i) => (
                       <li key={i} className="flex justify-between gap-3 px-3 py-2">

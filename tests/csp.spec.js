@@ -27,6 +27,7 @@ test('shop + checkout + admin work under the enforced CSP', async ({ page }) => 
   await page.getByRole('button', { name: /3-4Y/ }).click()
   await page.getByRole('button', { name: /^Add/ }).click()
   await page.locator('#co-name').fill('CSP Tester')
+  await page.locator('#co-phone').fill('0771234567')
   await page.locator('#co-address').fill('12 Lake Road, Kandy')
   await page.locator('#co-district').selectOption('Kandy')
   await page.getByRole('button', { name: 'Place Order via WhatsApp' }).click()

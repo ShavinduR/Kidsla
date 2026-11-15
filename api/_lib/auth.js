@@ -88,9 +88,11 @@ export function sessionCookie(req, token) {
   return parts.join('; ')
 }
 
-/** Guard for admin endpoints:  if (!(await requireAdmin(req, res))) return */
+/** Guard for admin endpoints. Returns the session (truthy) or sends 401 and returns null:
+ *    const admin = await requireAdmin(req, res); if (!admin) return */
 export async function requireAdmin(req, res) {
-  if (await isAuthenticated(req)) return true
+  const session = await getSession(req)
+  if (session) return session
   send(res, 401, { error: 'Not signed in' })
-  return false
+  return null
 }

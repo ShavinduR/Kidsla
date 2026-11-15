@@ -68,8 +68,8 @@ async function takeStock(db, session, lines, { hold }, now) {
   }
 }
 
-/** Create a pending order and hold its stock. All-or-nothing. Returns the order document. */
-export async function createHeldOrder({ orderIdFor, doc }) {
+/** Create a pending order and hold its stock for `holdMs`. All-or-nothing. Returns the order document. */
+export async function createHeldOrder({ orderIdFor, doc, holdMs = HOLD_HOURS * 3600_000 }) {
   const db = await getDb()
   return withTransaction(async (session) => {
     const now = new Date()
@@ -81,7 +81,7 @@ export async function createHeldOrder({ orderIdFor, doc }) {
       status: 'pending',
       stockHeld: true,
       createdAt: now,
-      expiresAt: new Date(now.getTime() + HOLD_HOURS * 3600_000),
+      expiresAt: new Date(now.getTime() + holdMs),
       history: [{ status: 'pending', at: now }],
     }
     await db.collection('orders').insertOne(order, { session })
@@ -176,4 +176,64 @@ export async function releaseExpired(limit = 25) {
     }
   }
   return released
+}
+
+/**
+ * Apply a VERIFIED payment notification (see /api/payhere/notify) to an order. Transactional.
+ * Returns { outcome } — 'paid' | 'already-paid' | 'paid-needs-attention' | 'status-updated' | 'ignored'.
+ */
+export async function recordPayment(orderId, p) {
+  const db = await getDb()
+  return withTransaction(async (session) => {
+    const now = new Date()
+    const orders = db.collection('orders')
+    const order = await orders.findOne({ _id: orderId }, { session })
+    if (!order) throw new OrderError(404, 'Order not found.')
+    const pay = order.payment ?? {}
+    const base = { ...pay, method: 'online', paymentId: p.paymentId, via: p.via, message: p.message, updatedAt: now }
+
+    if (p.status !== 'paid') {
+      // A later "cancelled"/"failed" must never overwrite a successful payment; chargebacks always count.
+      if (pay.status === 'paid' && p.status !== 'chargedback') return { outcome: 'ignored' }
+      const set = { payment: { ...base, status: p.status } }
+      if (p.status === 'chargedback') set.needsAttention = 'Chargeback: the customer disputed this card payment. Check PayHere.'
+      await orders.updateOne({ _id: orderId }, { $set: set, $push: { history: { status: `payment:${p.status}`, at: now } } }, { session })
+      return { outcome: 'status-updated' }
+    }
+
+    if (pay.status === 'paid') return { outcome: 'already-paid' }
+    const paid = { ...base, status: 'paid', paidAt: now }
+
+    if (order.status === 'pending' && order.stockHeld) {
+      // Normal case: held units become sold, the order is confirmed automatically.
+      const ops = bySize(order.items).map((it) => stockMove(it, { reserved: -it.qty }, now))
+      await db.collection('products').bulkWrite(ops, { session, ordered: true })
+    } else if (order.status !== 'confirmed') {
+      // Paid AFTER the hold expired (or after a cancel): take the stock again if it's still there.
+      try {
+        await takeStock(db, session, order.items, { hold: false }, now)
+      } catch (err) {
+        if (!(err instanceof OrderError)) throw err
+        await orders.updateOne(
+          { _id: orderId },
+          {
+            $set: { payment: paid, needsAttention: 'Paid online, but the items were no longer in stock. Restock and confirm, or refund in PayHere.' },
+            $push: { history: { status: 'payment:paid', at: now } },
+          },
+          { session },
+        )
+        return { outcome: 'paid-needs-attention' }
+      }
+    }
+    await orders.updateOne(
+      { _id: orderId },
+      {
+        $set: { status: 'confirmed', confirmedAt: now, stockHeld: false, payment: paid },
+        $unset: { expiresAt: '', needsAttention: '' },
+        $push: { history: { status: 'confirmed', at: now, note: 'paid online' } },
+      },
+      { session },
+    )
+    return { outcome: 'paid' }
+  })
 }

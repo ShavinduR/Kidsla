@@ -12,6 +12,7 @@ const waUrls = (page) => {
 }
 const fillCheckout = async (page, district = 'Kandy') => {
   await page.locator('#co-name').fill('Nimali Perera')
+  await page.locator('#co-phone').fill('077 123 4567')
   await page.locator('#co-address').fill('12 Lake Road, Nugegoda')
   await page.locator('#co-district').selectOption(district)
 }

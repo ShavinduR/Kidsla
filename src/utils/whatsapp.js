@@ -5,7 +5,7 @@ export const waLink = (text) =>
   `https://wa.me/${WHATSAPP_NUMBER}${text ? `?text=${encodeURIComponent(text)}` : ''}`
 
 /** items: [{ productId, title, size, color, qty, price }] — the server-confirmed lines when available. */
-export function buildOrderMessage({ orderId, customer, items: orderItems, subtotal, deliveryFee, total, paymentLabel }) {
+export function buildOrderMessage({ orderId, customer, items: orderItems, subtotal, deliveryFee, total, paymentLabel, bankDetails }) {
   const items = orderItems.map(
     (l, i) =>
       `${i + 1}. ${l.title} (${l.productId})\n    Colour: ${l.color} | Size: ${l.size} | Qty: ${l.qty} | ${formatLKR(l.price * l.qty)}`,
@@ -14,6 +14,7 @@ export function buildOrderMessage({ orderId, customer, items: orderItems, subtot
     `🛍️ *New KIDSLA Order — ${orderId}*`,
     '',
     `*Name:* ${customer.name.trim()}`,
+    `*Phone:* ${customer.phone}`,
     `*Address:* ${customer.address.trim()}`,
     `*District:* ${customer.district}`,
     `*Payment:* ${paymentLabel}`,
@@ -22,11 +23,13 @@ export function buildOrderMessage({ orderId, customer, items: orderItems, subtot
     ...items,
     '',
     `Subtotal: ${formatLKR(subtotal)}`,
-    `Delivery (${customer.district === 'Colombo' ? 'Colombo' : 'Outstation'}): ${formatLKR(deliveryFee)}`,
+    `Delivery (${customer.district === 'Colombo' ? 'Colombo' : 'Outstation'}): ${deliveryFee ? formatLKR(deliveryFee) : 'FREE'}`,
     `*Total: ${formatLKR(total)}*`,
     '',
     customer.payment === 'bank'
-      ? 'Please send me the bank details to complete my order. Thank you!'
+      ? bankDetails
+        ? 'I will transfer the total (reference: my order ID) and send the receipt here. Thank you!'
+        : 'Please send me the bank details to complete my order. Thank you!'
       : 'Please confirm my order. Thank you!',
   ].join('\n')
 }

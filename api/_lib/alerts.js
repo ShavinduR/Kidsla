@@ -72,11 +72,11 @@ export function alertNewOrder(order) {
   const c = order.customer
   return background(
     sendEmail({
-      subject: `🛍️ New order ${order._id ?? order.orderId}: ${formatLKR(order.total)}`,
+      subject: `${order.paidOnline ? '💳 Paid order' : '🛍️ New order'} ${order._id ?? order.orderId}: ${formatLKR(order.total)}`,
       html: `<div style="font-family:system-ui,sans-serif;color:#3A3631;max-width:520px">
         <h2 style="margin:0 0 4px">New order ${esc(order._id ?? order.orderId)}</h2>
-        <p style="margin:0 0 16px;color:#625B53">Pending: confirm it in the admin when the customer’s WhatsApp message arrives.</p>
-        <p style="margin:0"><strong>${esc(c.name)}</strong><br>${esc(c.address)}<br>${esc(c.district)} · ${c.payment === 'bank' ? 'Bank transfer' : 'Cash on delivery'}</p>
+        <p style="margin:0 0 16px;color:#625B53">${order.paidOnline ? 'Paid online via PayHere and confirmed automatically. Pack and ship it.' : 'Pending: confirm it in the admin when the customer’s WhatsApp message arrives.'}</p>
+        <p style="margin:0"><strong>${esc(c.name)}</strong> · ${esc(c.phone ?? '')}<br>${esc(c.address)}<br>${esc(c.district)} · ${{ bank: 'Bank transfer', online: 'Paid online', cod: 'Cash on delivery' }[c.payment] ?? 'Cash on delivery'}</p>
         <table style="width:100%;margin:16px 0;border-top:1px solid #EFE7DC;border-bottom:1px solid #EFE7DC">${rows}</table>
         <p style="margin:0">Delivery ${formatLKR(order.deliveryFee)}<br><strong>Total ${formatLKR(order.total)}</strong></p>${admin}</div>`,
       text: `New order ${order._id ?? order.orderId} from ${c.name} (${c.district}): ${formatLKR(order.total)}`,
@@ -117,6 +117,17 @@ export function alertLoginAttack(count) {
         <p>Admin sign-in is paused for everyone until the hour resets. If this wasn’t you, consider changing
         <code>ADMIN_PASSWORD</code> in Vercel (this also signs out every device).</p></div>`,
       text: `${count} failed admin sign-in attempts in the last hour.`,
+    }),
+  )
+}
+
+/** Payment needs a human: late payment for sold-out items, amount mismatch, chargeback, unknown order. */
+export function alertPaymentProblem(orderId, text) {
+  return background(
+    sendEmail({
+      subject: `⚠️ KIDSLA payment needs attention: ${String(orderId ?? '').slice(0, 30)}`,
+      html: `<div style="font-family:system-ui,sans-serif"><h3>Order ${esc(orderId)}</h3><p>${esc(text)}</p><p>Open the admin → Orders, and your PayHere account.</p></div>`,
+      text: `Order ${orderId}: ${text}`,
     }),
   )
 }

@@ -37,3 +37,7 @@ export const importInventory = (file, { dryRun }) =>
     headers: { 'Content-Type': 'application/octet-stream' },
     body: file,
   })
+
+export const fetchSettings = () => call('/api/admin/settings')
+export const saveSettings = (patch) => call('/api/admin/settings', json('PATCH', patch))
+export const fetchActivity = (target) => call(`/api/admin/activity${target ? `?target=${encodeURIComponent(target)}` : ''}`)

@@ -7,7 +7,7 @@ test.describe.configure({ mode: 'serial' })
 test('a new order emails the owner, with customer text safely escaped', async () => {
   await seed()
   await clearEmails()
-  const evil = { name: '<img src=x onerror=alert(1)>', address: '12 <b>Lake</b> Road, Kandy', district: 'Colombo', payment: 'bank' }
+  const evil = { name: '<img src=x onerror=alert(1)>', phone: '0771234567', address: '12 <b>Lake</b> Road, Kandy', district: 'Colombo', payment: 'bank' }
   const r = await placeOrder(await api(), [{ id: 'KD-G-001', size: '3-4Y', color: 'Oat', qty: 2 }], evil)
   const { orderId } = await r.json()
   await expect.poll(async () => (await emails()).length).toBe(1)

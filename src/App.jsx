@@ -3,16 +3,19 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { ProductsProvider } from './context/ProductsContext'
 import { CartProvider } from './context/CartContext'
+import { SettingsProvider } from './context/SettingsContext'
 import Storefront from './pages/Storefront'
 import { excludeAdmin, initMetaPixel } from './utils/analytics'
 
 // Admin is code-split: shoppers never download it. The gate checks the server session first.
 const AdminGate = lazy(() => import('./pages/AdminGate'))
+const OrderStatus = lazy(() => import('./pages/OrderStatus'))
 
 export default function App() {
   useEffect(() => initMetaPixel(), [])
 
   return (
+    <SettingsProvider>
     <ProductsProvider>
       <CartProvider>
         <BrowserRouter>
@@ -21,6 +24,7 @@ export default function App() {
               <Route path="/" element={<Storefront />} />
               <Route path="/p/:slug" element={<Storefront />} />
               <Route path="/admin" element={<AdminGate />} />
+              <Route path="/order/:id" element={<OrderStatus />} />
               <Route path="*" element={<Storefront />} />
             </Routes>
           </Suspense>
@@ -34,5 +38,6 @@ export default function App() {
         <Analytics beforeSend={excludeAdmin} />
       </CartProvider>
     </ProductsProvider>
+    </SettingsProvider>
   )
 }
