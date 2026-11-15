@@ -5,20 +5,49 @@ import { updateProduct } from '../../services/adminApi'
 
 const STATUS_LABEL = { active: 'Active (can be ordered)', coming_soon: 'Coming soon', hidden: 'Hidden from shop' }
 
-export default function EditProductDialog({ product, onClose, onSaved }) {
-  const isClothing = product.category === 'Clothing'
-  const [price, setPrice] = useState(String(product.price))
-  const [status, setStatus] = useState(product.status)
-  const [stock, setStock] = useState(Object.fromEntries(SIZES.map((s) => [s, String(product.stock?.[s] ?? 0)])))
+const formFrom = (p) => ({
+  price: String(p.price),
+  status: p.status,
+  stock: Object.fromEntries(SIZES.map((s) => [s, String(p.stock?.[s] ?? 0)])),
+})
+
+export default function EditProductDialog({ product: initial, onClose, onSaved }) {
+  // `base` = the server values this form started from (incl. version). Only fields the admin
+  // actually changes are sent, together with base.version, so the server can refuse stale saves.
+  const [base, setBase] = useState(initial)
+  const [form, setForm] = useState(() => formFrom(initial))
   const [error, setError] = useState('')
+  const [conflict, setConflict] = useState('')
   const [saving, setSaving] = useState(false)
+  const isClothing = base.category === 'Clothing'
+  const { price, status, stock } = form
+  const setPrice = (v) => setForm((f) => ({ ...f, price: v }))
+  const setStatus = (v) => setForm((f) => ({ ...f, status: v }))
+  const setStock = (fn) => setForm((f) => ({ ...f, stock: fn(f.stock) }))
 
   const save = async (e) => {
     e.preventDefault()
+    const start = formFrom(base)
+    const edit = { id: base.id, version: base.version ?? 0 }
+    if (price !== start.price) edit.price = price
+    if (status !== start.status) edit.status = status
+    if (isClothing) {
+      const changed = SIZES.filter((s) => stock[s] !== start.stock[s])
+      if (changed.length) edit.stock = Object.fromEntries(changed.map((s) => [s, stock[s]]))
+    }
+    if (Object.keys(edit).length === 2) return onClose() // nothing changed
+
     setSaving(true)
     setError('')
-    const res = await updateProduct({ id: product.id, price, status, ...(isClothing && { stock }) })
+    setConflict('')
+    const res = await updateProduct(edit)
     setSaving(false)
+    if (res.status === 409 && res.product) {
+      // Someone/something changed it meanwhile → show the latest numbers; the admin re-applies their edit.
+      setBase(res.product)
+      setForm(formFrom(res.product))
+      return setConflict(res.error)
+    }
     if (!res.ok) return setError(res.error ?? 'Couldn’t save. Try again.')
     onSaved(res.product, res.changed)
   }
@@ -27,8 +56,8 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
 
   return (
     <Dialog
-      title={`Edit ${product.title}`}
-      subtitle={product.id}
+      title={`Edit ${base.title}`}
+      subtitle={`${base.id} · version ${base.version ?? 0}`}
       onClose={onClose}
       footer={
         <>
@@ -38,6 +67,11 @@ export default function EditProductDialog({ product, onClose, onSaved }) {
       }
     >
       <form id="edit-product" onSubmit={save} className="space-y-5">
+        {conflict && (
+          <p role="alert" className="rounded-2xl bg-blush-light p-3 text-sm text-ink ring-1 ring-blush">
+            <strong className="font-semibold">Updated meanwhile.</strong> {conflict}
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">Price (LKR)</span>

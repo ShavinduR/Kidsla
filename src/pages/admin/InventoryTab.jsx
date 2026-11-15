@@ -154,7 +154,8 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
         <summary className="cursor-pointer font-semibold">How bulk update works</summary>
         <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-ink-soft">
           <li><strong className="text-ink">Export to Excel</strong>, then open the file.</li>
-          <li>Edit <code>price</code>, <code>status</code> (active / coming_soon / hidden) or the <code>stock_…</code> columns. Leave <code>id</code> as it is.</li>
+          <li>Edit <code>price</code>, <code>status</code> (active / coming_soon / hidden) or the <code>stock_…</code> columns. Don’t change <code>id</code> or <code>version</code>.</li>
+          <li>Import soon after exporting. If a product sells or is edited in between, its row is skipped (so stock never jumps back) and you just export again.</li>
           <li>Save, then click <strong className="text-ink">Bulk Import Update</strong> and pick the file (.xlsx or .csv).</li>
           <li>Check the list of changes. Nothing is saved until you press <em>Apply</em>.</li>
         </ol>
@@ -178,7 +179,12 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
           onApplied={(res) => {
             setImporting(null)
             onReload()
-            toast(`Updated ${res.modified} product${res.modified === 1 ? '' : 's'}.`)
+            const skipped = res.conflicts?.length ?? 0
+            toast(
+              `Updated ${res.modified} product${res.modified === 1 ? '' : 's'}.` +
+                (skipped ? ` ${skipped} skipped: changed while importing (${res.conflicts.join(', ')}). Export again for those.` : ''),
+              skipped ? 'error' : 'ok',
+            )
           }}
         />
       )}

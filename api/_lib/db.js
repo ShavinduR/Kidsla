@@ -31,6 +31,8 @@ export async function getDb() {
     db.collection('orders').createIndex({ createdAt: -1 }),
     db.collection('orders').createIndex({ status: 1, createdAt: -1 }),
     db.collection('products').createIndex({ status: 1 }),
+    // One-time backfill: products created before version tracking start at version 0.
+    db.collection('products').updateMany({ version: { $exists: false } }, { $set: { version: 0 } }),
   ]).catch((err) => {
     indexesReady = null
     console.error('index creation failed', err)

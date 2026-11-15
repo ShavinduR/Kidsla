@@ -25,6 +25,7 @@ npm run build
 - Sold-out sizes are disabled; quantities are capped to stock.
 - Delivery: Colombo **LKR 350**, all other districts **LKR 400**.
 - Checkout saves the order (server-checked stock and prices, sequential `KD-YYMM-NNN`), opens WhatsApp, then clears the cart. A confirmation screen keeps a "re-open WhatsApp" link in case the app didn't launch.
+- If the server is unreachable, the order still goes to WhatsApp with a fallback ID **`KDX-YYMM-XXXX`**. KDX orders are *not* in the admin; handle them from the chat.
 
 ## Vercel setup
 1. **Environment variables** (Project → Settings → Environment Variables):
@@ -38,6 +39,7 @@ Password-protected by Vercel Functions in `/api` (`login`, `logout`, `session`):
 - The password is checked **on the server** against `ADMIN_PASSWORD`. It is never in the website's code.
 - Success sets a signed, **HttpOnly, Secure, SameSite=Strict** cookie (8 hours). Tampered/forged cookies are rejected.
 - 5 wrong attempts → 15-minute lockout (per IP, best-effort), plus a delay on every wrong attempt.
+- Every write request must be JSON (import: raw file) **and** come from this site's own origin, so other websites can't forge admin actions or orders.
 - The dashboard code isn't downloaded until the server confirms the session.
 
 **Setup:** in Vercel → Settings → Environment Variables add (Production + Preview), then redeploy:
@@ -46,7 +48,7 @@ Password-protected by Vercel Functions in `/api` (`login`, `logout`, `session`):
 | `ADMIN_PASSWORD` | a long password (12+ characters) |
 | `ADMIN_SESSION_SECRET` | 64 random characters, e.g. from `openssl rand -hex 32` |
 
-Changing either value signs everyone out. Locally, put them in `.env.local`; `npm run dev` serves `/api` too.
+Changing **either** value signs everyone out (the cookie signing key is derived from both). Locally, put them in `.env.local`; `npm run dev` serves `/api` too.
 
 ## Database (MongoDB Atlas)
 1. Create a free cluster at https://cloud.mongodb.com (M0 Free, region near Sri Lanka, e.g. Mumbai `ap-south-1`).
@@ -57,3 +59,13 @@ Changing either value signs everyone out. Locally, put them in `.env.local`; `np
 6. Open `/admin` → **Load starter catalogue**.
 
 Locally: add `MONGODB_URI` to `.env.local`. Without it the shop runs on the catalogue bundled in `src/data/products.js`.
+
+## Security headers (CSP)
+`vercel.json` sends a **Content-Security-Policy-Report-Only** header plus `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` and HSTS.
+Report-Only blocks nothing; browsers report would-be violations to `/api/csp-report` (Vercel → Logs → search `csp-violation`).
+After a week with no unexpected reports, rename the header key to `Content-Security-Policy` to enforce it.
+If you add a new third-party service (e.g. Cloudinary images, Sentry), add its domain to the matching directive first.
+
+## Inventory spreadsheets
+Exports include a **`version`** column. Don't edit it. A row is only imported if that product hasn't changed since you exported
+(sales, edits). Changed rows are skipped and listed, so old spreadsheets can never put sold stock back. Just export again.

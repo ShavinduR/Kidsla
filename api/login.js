@@ -1,3 +1,4 @@
+import { guardWrite } from './_lib/http.js'
 import {
   clearFailures, createToken, isConfigured, lockedFor, passwordMatches, readJson, recordFailure, send, sessionCookie,
 } from './_lib/auth.js'
@@ -6,8 +7,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' }, { Allow: 'POST' })
-  if (!String(req.headers['content-type'] ?? '').includes('application/json'))
-    return send(res, 415, { error: 'Expected JSON' })
+  if (!guardWrite(req, res)) return // JSON only + same-origin (blocks login CSRF)
   if (!isConfigured())
     return send(res, 503, { error: 'Admin login is not set up yet. Add ADMIN_PASSWORD and ADMIN_SESSION_SECRET in Vercel.' })
 

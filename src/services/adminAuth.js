@@ -15,4 +15,5 @@ export const login = (password) =>
     body: JSON.stringify({ password }),
   })
 
-export const logout = () => call('/api/logout', { method: 'POST' })
+export const logout = () =>
+  call('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })

@@ -21,13 +21,13 @@ export default handle(['GET'], async (req, res) => {
   ws.columns = INVENTORY_COLUMNS.map((key) => ({
     header: key,
     key,
-    width: key === 'title' ? 28 : key === 'material' ? 24 : key.startsWith('stock_') ? 11 : 14,
+    width: key === 'version' ? 9 : key === 'title' ? 28 : key === 'material' ? 24 : key.startsWith('stock_') ? 11 : 14,
   }))
   ws.addRows(rows)
   ws.getRow(1).font = { bold: true }
   ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDE3D5' } }
   // Make it obvious which columns are safe to edit.
-  ;['id', 'title', 'category', 'gender', 'material'].forEach((k) => (ws.getColumn(k).font = { color: { argb: 'FF7A736A' } }))
+  ;['id', 'version', 'title', 'category', 'gender', 'material'].forEach((k) => (ws.getColumn(k).font = { color: { argb: 'FF7A736A' } }))
   ws.getColumn('status').eachCell((c, row) => {
     if (row > 1) c.dataValidation = { type: 'list', allowBlank: false, formulae: ['"active,coming_soon,hidden"'] }
   })

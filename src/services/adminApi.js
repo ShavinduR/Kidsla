@@ -18,7 +18,7 @@ const json = (method, body) => ({ method, headers: { 'Content-Type': 'applicatio
 
 export const fetchAdminProducts = () => call('/api/admin/products')
 export const updateProduct = (edit) => call('/api/admin/products', json('PATCH', edit))
-export const seedCatalogue = () => call('/api/admin/seed', { method: 'POST' })
+export const seedCatalogue = () => call('/api/admin/seed', json('POST', {}))
 
 export const fetchOrders = (status) => call(`/api/admin/orders${status ? `?status=${status}` : ''}`)
 export const setOrderStatus = (id, status) => call('/api/admin/orders', json('PATCH', { id, status }))

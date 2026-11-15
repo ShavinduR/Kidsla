@@ -3,7 +3,7 @@
 // Required environment variables (Vercel → Settings → Environment Variables, NOT prefixed with VITE_):
 //   ADMIN_PASSWORD        — the admin login password (use 12+ characters)
 //   ADMIN_SESSION_SECRET  — random string used to sign session cookies (e.g. `openssl rand -hex 32`)
-// Changing either one logs everyone out.
+// Changing EITHER one invalidates every existing session (the signing key is derived from both).
 import crypto from 'node:crypto'
 import { send } from './http.js'
 
@@ -25,16 +25,24 @@ export const isConfigured = () =>
 export const passwordMatches = (input) =>
   crypto.timingSafeEqual(sha256(input ?? ''), sha256(process.env.ADMIN_PASSWORD))
 
+/**
+ * Signing key = ADMIN_SESSION_SECRET + sha256(ADMIN_PASSWORD).
+ * Tokens are stateless, so this is what makes a password change revoke every session:
+ * old tokens were signed with the old password's hash and no longer verify.
+ */
+const signingKey = () =>
+  process.env.ADMIN_SESSION_SECRET + crypto.createHash('sha256').update(process.env.ADMIN_PASSWORD).digest('hex')
+
 export function createToken() {
   const payload = b64url(JSON.stringify({ sub: 'admin', exp: Date.now() + SESSION_HOURS * 3600_000 }))
-  return `${payload}.${hmac(payload, process.env.ADMIN_SESSION_SECRET)}`
+  return `${payload}.${hmac(payload, signingKey())}`
 }
 
 export function verifyToken(token) {
   if (!token || !isConfigured()) return false
   const [payload, sig] = token.split('.')
   if (!payload || !sig) return false
-  const expected = hmac(payload, process.env.ADMIN_SESSION_SECRET)
+  const expected = hmac(payload, signingKey())
   if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false
   try {
     const { sub, exp } = JSON.parse(Buffer.from(payload, 'base64url').toString())

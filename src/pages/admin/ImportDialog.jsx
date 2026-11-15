@@ -41,6 +41,10 @@ export default function ImportDialog({ file, report, onClose, onApplied }) {
             <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-sm text-ink">{errors.map((e) => <li key={e}>• {e}</li>)}</ul>
           </div>
         )}
+        <p className="rounded-2xl bg-sand/70 p-3 text-sm text-ink-soft">
+          Each row is only applied if that product hasn’t changed since you exported it. Rows changed by orders or edits in the
+          meantime are skipped, so stock never jumps back.
+        </p>
         <div>
           <p className="font-semibold">{changes.length} product{changes.length === 1 ? '' : 's'} will change</p>
           {changes.length === 0 ? (

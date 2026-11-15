@@ -48,9 +48,50 @@ export async function readRaw(req, limit = 4_000_000) {
   return Buffer.concat(chunks)
 }
 
-/** Wraps a handler: method check + JSON 500 on unexpected errors (details logged, not leaked). */
-export const handle = (methods, fn) => async (req, res) => {
+const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS']
+
+/**
+ * CSRF / cross-site abuse guard for every state-changing request (POST, PATCH, PUT, DELETE).
+ *  1. Content-Type must be one we expect (application/json by default). HTML forms can only send
+ *     urlencoded / multipart / text/plain, and a cross-origin fetch with JSON triggers a CORS
+ *     preflight that we never approve, so a foreign website can't forge these requests.
+ *  2. Origin must be present and equal to this site's own host. Browsers always send Origin on
+ *     POST/PATCH and scripts on other sites can't fake it. Same-origin, so it works on
+ *     *.vercel.app previews, production and a future custom domain without configuration.
+ *  3. Sec-Fetch-Site (modern browsers) must not be "cross-site"/"same-site": blocks sibling subdomains.
+ * Returns true if allowed; otherwise sends 403/415 and returns false.
+ */
+export function guardWrite(req, res, { contentTypes = ['application/json'] } = {}) {
+  if (SAFE_METHODS.includes(req.method)) return true
+
+  const type = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase()
+  if (!contentTypes.includes(type)) {
+    send(res, 415, { error: `Unsupported content type. Expected ${contentTypes.join(' or ')}.` })
+    return false
+  }
+
+  const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '').split(',')[0].trim().toLowerCase()
+  let originHost = ''
+  try {
+    originHost = new URL(req.headers.origin).host.toLowerCase()
+  } catch {
+    /* missing or malformed Origin */
+  }
+  const site = req.headers['sec-fetch-site']
+  if (!host || originHost !== host || (site && !['same-origin', 'none'].includes(site))) {
+    send(res, 403, { error: 'Request blocked: it must come from this website.' })
+    return false
+  }
+  return true
+}
+
+/**
+ * Wraps a handler: method check, write guard (content type + origin), and a JSON 500 on unexpected
+ * errors (details logged, never leaked). `contentTypes` applies to non-GET methods only.
+ */
+export const handle = (methods, fn, { contentTypes } = {}) => async (req, res) => {
   if (!methods.includes(req.method)) return methodNotAllowed(res, methods)
+  if (!guardWrite(req, res, { contentTypes })) return
   try {
     await fn(req, res)
   } catch (err) {

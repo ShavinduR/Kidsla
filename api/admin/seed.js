@@ -10,6 +10,6 @@ export default handle(['POST'], async (req, res) => {
   const products = db.collection('products')
   if (await products.estimatedDocumentCount()) return send(res, 409, { error: 'The database already has products.' })
   const now = new Date()
-  await products.insertMany(initialProducts.map((p, i) => ({ ...toDoc(p), position: i, createdAt: now, updatedAt: now })))
+  await products.insertMany(initialProducts.map((p, i) => ({ ...toDoc(p), position: i, version: 0, createdAt: now, updatedAt: now })))
   send(res, 201, { inserted: initialProducts.length })
 })

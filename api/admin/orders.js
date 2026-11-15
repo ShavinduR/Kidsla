@@ -36,7 +36,8 @@ export default handle(['GET', 'PATCH'], async (req, res) => {
   const products = db.collection('products')
   const stockOp = (items, sign) =>
     items.map((it) => ({
-      updateOne: { filter: { _id: it.productId }, update: { $inc: { [`stock.${it.size}`]: sign * it.qty }, $set: { updatedAt: now } } },
+      // version++ so any open edit dialog / exported sheet knows stock moved (audit H1)
+      updateOne: { filter: { _id: it.productId }, update: { $inc: { [`stock.${it.size}`]: sign * it.qty, version: 1 }, $set: { updatedAt: now } } },
     }))
 
   if (status === 'confirmed') {
@@ -53,7 +54,7 @@ export default handle(['GET', 'PATCH'], async (req, res) => {
     for (const it of order.items) {
       const r = await products.updateOne(
         { _id: it.productId, [`stock.${it.size}`]: { $gte: it.qty } },
-        { $inc: { [`stock.${it.size}`]: -it.qty }, $set: { updatedAt: now } },
+        { $inc: { [`stock.${it.size}`]: -it.qty, version: 1 }, $set: { updatedAt: now } },
       )
       if (!r.modifiedCount) {
         if (taken.length) await products.bulkWrite(stockOp(taken, +1))
