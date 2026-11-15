@@ -1,37 +1,35 @@
 # KIDSLA — Premium Kids' Essentials Storefront
 
-React (Vite) + Tailwind CSS v4 + Lucide icons. Mobile-first storefront with a **WhatsApp checkout flow** (no payment gateway).
-
-## Run
+React (Vite) · Tailwind CSS v4 · Lucide · React Router. Mobile-first storefront with a **WhatsApp checkout**, plus an inventory **Admin Dashboard** at `/admin`.
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # production build → dist/
+npm run dev      # http://localhost:5173   (admin: /admin)
+npm run build
 ```
 
-## Structure
+## What's inside
+| Area | Where |
+|---|---|
+| Business settings: WhatsApp number, delivery fees, districts, policies | `src/data/site.js` |
+| Size guide (reviewed measurements + notes) | `src/data/sizeGuide.js` |
+| Products, stock per size, images | `src/data/products.js` |
+| Checkout + WhatsApp message | `src/components/CartDrawer.jsx`, `src/utils/whatsapp.js` |
+| Admin import/export (mock → Node backend) | `src/pages/AdminDashboard.jsx`, `src/services/inventoryApi.js`, `docs/BACKEND.md` |
+| SEO / Open Graph | `index.html`, `public/og-image.png` |
+| Meta Pixel + Vercel Analytics | `src/utils/analytics.js`, `src/App.jsx` |
 
-```
-src/
-  data/products.js          Mock catalogue (Clothing · Toys · Educational)
-  context/CartContext.jsx   Cart state (persisted to localStorage)
-  utils/whatsapp.js         Order message builder + wa.me link (94742327807)
-  utils/format.js           LKR price formatting
-  utils/useLockBody.js      Scroll lock for modal/drawer
-  components/
-    Header.jsx              Logo, nav, cart badge, mobile menu
-    Hero.jsx                Headline + "Shop the Collection" CTA
-    Categories.jsx          Girls / Boys / Toys / Educational tiles
-    ProductGrid.jsx         Filter chips + responsive grid
-    ProductCard.jsx         Image, material, LKR price, Quick View / Add
-    ProductModal.jsx        Size + colour + qty picker → Add to Cart
-    CartDrawer.jsx          Items, subtotal, delivery note, form, WhatsApp checkout
-    TrustStrip.jsx, Footer.jsx, SmartImage.jsx
-```
+## Ordering rules
+- Only **Clothing** with `status: 'active'` can be ordered. Toys & Educational show **Coming Soon** + "Notify Me on WhatsApp".
+- Sold-out sizes are disabled; quantities are capped to stock.
+- Delivery: Colombo **LKR 350**, all other districts **LKR 400**.
+- Checkout generates an order ID (`KD-YYMM-NNN`), opens WhatsApp, then clears the cart. A confirmation screen keeps a "re-open WhatsApp" link in case the app didn't launch.
 
-## Customising
+## Vercel setup
+1. **Environment variables** (Project → Settings → Environment Variables):
+   - `VITE_SITE_URL` = your live URL, e.g. `https://kidsla.vercel.app` or `https://kidsla.lk` (no trailing slash). Needed for link previews.
+   - `VITE_META_PIXEL_ID` = your Pixel ID (optional).
+2. **Analytics**: Project → Analytics → Enable.
+3. Redeploy. Test your link preview at https://developers.facebook.com/tools/debug/ (also refreshes WhatsApp's cache).
 
-- **Products:** edit `src/data/products.js` (fields: `id, title, category, gender, material, price, sizes, colors, imageUrl`).
-- **WhatsApp number:** `WHATSAPP_NUMBER` in `src/utils/whatsapp.js` (international format, no `+` or leading `0`).
-- **Brand colours:** the `@theme` block in `src/index.css`.
+> ⚠️ `/admin` is a frontend demo with no login. Changes are in-memory only. Add backend auth before using it for real (see `docs/BACKEND.md`).

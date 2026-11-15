@@ -1,10 +1,12 @@
 import { useMemo } from 'react'
 import ProductCard from './ProductCard'
-import { products } from '../data/products'
+import { useProducts } from '../context/ProductsContext'
 
 const FILTERS = ['All', 'Girls', 'Boys', 'Toys', 'Educational']
 
 export default function ProductGrid({ filter, onFilterChange, onQuickView }) {
+  const { products: all } = useProducts()
+  const products = useMemo(() => all.filter((p) => p.status !== 'hidden'), [all])
   const visible = useMemo(() => {
     switch (filter) {
       case 'All':
@@ -17,7 +19,7 @@ export default function ProductGrid({ filter, onFilterChange, onQuickView }) {
       default:
         return products.filter((p) => p.category === filter)
     }
-  }, [filter])
+  }, [filter, products])
 
   const isActive = (f) => f === filter || (filter === 'Clothing' && (f === 'Girls' || f === 'Boys'))
 
@@ -37,6 +39,7 @@ export default function ProductGrid({ filter, onFilterChange, onQuickView }) {
               <button
                 key={f}
                 onClick={() => onFilterChange(f)}
+                aria-pressed={isActive(f)}
                 className={`shrink-0 rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 ${
                   isActive(f)
                     ? 'bg-ink text-cream shadow-md'

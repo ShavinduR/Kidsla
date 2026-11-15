@@ -31,8 +31,8 @@ export default function Header({ onNavigate }) {
         scrolled ? 'bg-cream/85 shadow-[0_1px_0_0_rgba(58,54,49,0.06)] backdrop-blur-md' : 'bg-cream'
       }`}
     >
-      <div className="bg-sage-dark py-2 text-center text-[11px] font-medium tracking-[0.18em] text-cream uppercase sm:text-xs">
-        Island-wide delivery · Order easily via WhatsApp
+      <div className="bg-sage-dark py-2 text-center text-xs font-medium tracking-[0.12em] text-cream sm:tracking-[0.18em] uppercase">
+        Island-wide delivery · Easy WhatsApp ordering
       </div>
 
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:h-20 sm:px-6 lg:px-8">
@@ -74,7 +74,7 @@ export default function Header({ onNavigate }) {
           {count > 0 && (
             <span
               key={count /* re-mount → bounce animation on every change */}
-              className="absolute -top-0.5 -right-0.5 flex h-5 min-w-5 animate-pop items-center justify-center rounded-full bg-blush-dark px-1 text-[10px] font-semibold text-white ring-2 ring-cream"
+              className="absolute -top-0.5 -right-0.5 flex h-5 min-w-5 animate-pop items-center justify-center rounded-full bg-rose px-1 text-[11px] font-semibold text-white ring-2 ring-cream"
             >
               {count > 99 ? '99+' : count}
             </span>

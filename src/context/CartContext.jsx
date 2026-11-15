@@ -1,75 +1,103 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useProducts } from './ProductsContext'
+import { isOrderable, stockFor } from '../data/products'
+import { track } from '../utils/analytics'
 
 const CartContext = createContext(null)
-const STORAGE_KEY = 'kidsla-cart-v1'
+const STORAGE_KEY = 'kidsla-cart-v2' // v2: size ranges + stock. Old v1 carts are discarded.
 
-const loadCart = () => {
+const load = () => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
+    localStorage.removeItem('kidsla-cart-v1')
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY))
+    return Array.isArray(saved) ? saved : []
   } catch {
     return []
   }
 }
 
 export function CartProvider({ children }) {
-  const [items, setItems] = useState(loadCart)
+  const { products } = useProducts()
+  const [raw, setRaw] = useState(load)
   const [isOpen, setIsOpen] = useState(false)
+  const openCart = useCallback(() => setIsOpen(true), [])
+  const closeCart = useCallback(() => setIsOpen(false), [])
+
+  // The cart only stores ids — price, title and availability always come from the live
+  // catalogue, so a stale saved cart can never order an unavailable item or an old price.
+  const lines = useMemo(
+    () =>
+      raw
+        .map((item) => {
+          const product = products.find((p) => p.id === item.id)
+          if (!product || !isOrderable(product) || !product.sizes.includes(item.size)) return null
+          const qty = Math.min(item.qty, stockFor(product, item.size))
+          return qty > 0 ? { ...item, qty, product } : null
+        })
+        .filter(Boolean),
+    [raw, products],
+  )
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  }, [items])
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lines.map(({ product: _p, ...rest }) => rest)))
+  }, [lines])
 
-  // One line per product + size + colour combination
-  const addItem = useCallback((product, { size, color, qty = 1 }) => {
-    const key = `${product.id}__${size}__${color}`
-    setItems((prev) => {
-      const existing = prev.find((i) => i.key === key)
-      if (existing) {
-        return prev.map((i) => (i.key === key ? { ...i, qty: i.qty + qty } : i))
-      }
-      return [
-        ...prev,
-        {
-          key,
-          id: product.id,
-          title: product.title,
-          price: product.price,
-          imageUrl: product.imageUrl,
-          material: product.material,
-          size,
-          color,
-          qty,
-        },
-      ]
-    })
-  }, [])
+  const qtyInCart = useCallback(
+    (id, size) => lines.filter((l) => l.id === id && l.size === size).reduce((s, l) => s + l.qty, 0),
+    [lines],
+  )
 
-  const updateQty = useCallback((key, qty) => {
-    setItems((prev) =>
-      qty <= 0 ? prev.filter((i) => i.key !== key) : prev.map((i) => (i.key === key ? { ...i, qty } : i)),
-    )
-  }, [])
+  /** Returns the number actually added (may be less than requested if stock is short). */
+  const addItem = useCallback(
+    (product, { size, color, qty = 1 }) => {
+      if (!isOrderable(product)) return 0
+      const room = stockFor(product, size) - qtyInCart(product.id, size)
+      const add = Math.max(0, Math.min(qty, room))
+      if (!add) return 0
+      const key = `${product.id}__${size}__${color}`
+      setRaw((prev) => {
+        const kept = prev.filter((i) => lines.some((l) => l.key === i.key)) // drop stale entries
+        const hit = kept.find((i) => i.key === key)
+        return hit
+          ? kept.map((i) => (i.key === key ? { ...i, qty: i.qty + add } : i))
+          : [...kept, { key, id: product.id, size, color, qty: add }]
+      })
+      track('AddToCart', { content_ids: [product.id], content_type: 'product', value: product.price * add })
+      return add
+    },
+    [lines, qtyInCart],
+  )
 
-  const removeItem = useCallback((key) => setItems((prev) => prev.filter((i) => i.key !== key)), [])
-  const clearCart = useCallback(() => setItems([]), [])
+  const setQty = useCallback(
+    (key, qty) => {
+      const line = lines.find((l) => l.key === key)
+      if (!line) return
+      const others = qtyInCart(line.id, line.size) - line.qty
+      const max = stockFor(line.product, line.size) - others
+      setRaw((prev) =>
+        qty <= 0 ? prev.filter((i) => i.key !== key) : prev.map((i) => (i.key === key ? { ...i, qty: Math.min(qty, max) } : i)),
+      )
+    },
+    [lines, qtyInCart],
+  )
 
   const value = useMemo(() => {
-    const count = items.reduce((sum, i) => sum + i.qty, 0)
-    const subtotal = items.reduce((sum, i) => sum + i.qty * i.price, 0)
+    const count = lines.reduce((s, l) => s + l.qty, 0)
+    const subtotal = lines.reduce((s, l) => s + l.qty * l.product.price, 0)
     return {
-      items,
+      lines,
       count,
       subtotal,
       isOpen,
-      openCart: () => setIsOpen(true),
-      closeCart: () => setIsOpen(false),
+      openCart,
+      closeCart,
       addItem,
-      updateQty,
-      removeItem,
-      clearCart,
+      setQty,
+      removeItem: (key) => setRaw((prev) => prev.filter((i) => i.key !== key)),
+      clearCart: () => setRaw([]),
+      qtyInCart,
     }
-  }, [items, isOpen, addItem, updateQty, removeItem, clearCart])
+  }, [lines, isOpen, openCart, closeCart, addItem, setQty, qtyInCart])
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>
 }

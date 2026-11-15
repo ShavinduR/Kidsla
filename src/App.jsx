@@ -1,37 +1,32 @@
-import { useCallback, useState } from 'react'
-import Header from './components/Header'
-import Hero from './components/Hero'
-import Categories from './components/Categories'
-import ProductGrid from './components/ProductGrid'
-import ProductModal from './components/ProductModal'
-import CartDrawer from './components/CartDrawer'
-import TrustStrip from './components/TrustStrip'
-import Footer from './components/Footer'
+import { lazy, Suspense, useEffect } from 'react'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
+import { ProductsProvider } from './context/ProductsContext'
+import { CartProvider } from './context/CartContext'
+import Storefront from './pages/Storefront'
+import { initMetaPixel } from './utils/analytics'
+
+// Admin is code-split: shoppers never download it.
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 
 export default function App() {
-  const [filter, setFilter] = useState('All')
-  const [activeProduct, setActiveProduct] = useState(null)
-
-  const showShop = useCallback((nextFilter) => {
-    setFilter(nextFilter)
-    requestAnimationFrame(() => document.getElementById('shop')?.scrollIntoView({ behavior: 'smooth' }))
-  }, [])
-
-  const closeModal = useCallback(() => setActiveProduct(null), [])
+  useEffect(() => initMetaPixel(), [])
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Header onNavigate={(f) => (f === 'All' ? setFilter('All') : showShop(f))} />
-      <main className="flex-1">
-        <Hero onShop={() => showShop('All')} />
-        <Categories onSelect={showShop} />
-        <ProductGrid filter={filter} onFilterChange={setFilter} onQuickView={setActiveProduct} />
-        <TrustStrip />
-      </main>
-      <Footer />
-
-      {activeProduct && <ProductModal key={activeProduct.id} product={activeProduct} onClose={closeModal} />}
-      <CartDrawer />
-    </div>
+    <ProductsProvider>
+      <CartProvider>
+        <BrowserRouter>
+          <Suspense fallback={<div className="grid min-h-screen place-items-center text-ink-soft">Loading…</div>}>
+            <Routes>
+              <Route path="/" element={<Storefront />} />
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="*" element={<Storefront />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+        {/* Vercel Analytics — enable in Vercel → Project → Analytics. No-op until then. */}
+        <Analytics />
+      </CartProvider>
+    </ProductsProvider>
   )
 }

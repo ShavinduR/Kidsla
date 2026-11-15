@@ -57,7 +57,7 @@ export default function Categories({ onSelect }) {
             <div className="absolute inset-0 bg-gradient-to-t from-ink/55 via-ink/5 to-transparent transition-opacity duration-500 group-hover:from-ink/65" />
             <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4 sm:p-6">
               <div>
-                <p className="text-[10px] font-medium tracking-[0.2em] text-white/80 uppercase sm:text-xs">
+                <p className="text-xs font-semibold tracking-[0.16em] text-white uppercase">
                   {tile.subtitle}
                 </p>
                 <h3 className="mt-1 text-xl font-semibold text-white sm:text-2xl">{tile.title}</h3>

@@ -8,12 +8,15 @@
   --color-sand-dark: #E2D6C6;
   --color-sage: #8A9A7E;
   --color-sage-light: #DDE3D5;
-  --color-sage-dark: #6B7B60;
+  --color-sage-dark: #55654B; /* 5.9:1 on cream — AA for text */
   --color-blush: #E8C4C0;
   --color-blush-light: #F6E6E3;
   --color-blush-dark: #C99A95;
   --color-ink: #3A3631;
-  --color-ink-soft: #7A736A;
+  --color-ink-soft: #625B53; /* 6.3:1 on cream */
+  --color-rose: #A2504A;      /* errors, 5.2:1 */
+  --color-wa: #0E7C42;        /* WhatsApp green, darkened for 5.3:1 with white */
+  --color-wa-dark: #0B6E3A;
 
   --animate-fade-in: fade-in 0.3s ease-out;
   --animate-slide-in: slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
@@ -28,9 +31,18 @@
 
 html { scroll-behavior: smooth; }
 body {
-  @apply bg-cream text-ink font-sans antialiased;
+  @apply bg-cream text-ink font-sans antialiased text-[15px] sm:text-base;
   -webkit-tap-highlight-color: transparent;
 }
 ::selection { @apply bg-sage-light; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+
+/* Visible keyboard focus everywhere */
+:focus-visible { outline: 2px solid var(--color-sage-dark); outline-offset: 2px; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
+.snap-carousel { scroll-snap-type: x mandatory; scroll-behavior: smooth; overscroll-behavior-x: contain; }
+.snap-carousel > * { scroll-snap-align: center; scroll-snap-stop: always; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

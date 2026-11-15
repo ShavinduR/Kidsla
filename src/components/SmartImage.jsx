@@ -12,7 +12,7 @@ export default function SmartImage({ src, alt, className = '', tint = 'bg-sand' 
           {status === 'error' ? (
             <div className="flex flex-col items-center gap-2 text-ink-soft/60">
               <ImageOff className="h-7 w-7" strokeWidth={1.5} />
-              <span className="text-[11px] tracking-widest uppercase">KIDSLA</span>
+              <span className="text-xs tracking-widest uppercase">KIDSLA</span>
             </div>
           ) : (
             <div className="h-full w-full animate-pulse bg-sand-dark/40" />
