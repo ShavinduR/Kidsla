@@ -32,4 +32,19 @@ npm run build
 2. **Analytics**: Project → **Analytics** tab → **Enable** (Web Analytics). `@vercel/analytics` + `<Analytics />` are already in `src/App.jsx`; visitors and page views appear a few minutes after the next deploy. `/admin` visits are excluded. Shop events (`ViewContent`, `AddToCart`, `InitiateCheckout`, `Lead`) are also sent as custom events, which Vercel shows on Pro plans.
 3. Redeploy. Test your link preview at https://developers.facebook.com/tools/debug/ (also refreshes WhatsApp's cache).
 
-> ⚠️ `/admin` is a frontend demo with no login. Changes are in-memory only. Add backend auth before using it for real (see `docs/BACKEND.md`).
+## Admin login (`/admin`)
+Password-protected by Vercel Functions in `/api` (`login`, `logout`, `session`):
+- The password is checked **on the server** against `ADMIN_PASSWORD`. It is never in the website's code.
+- Success sets a signed, **HttpOnly, Secure, SameSite=Strict** cookie (8 hours). Tampered/forged cookies are rejected.
+- 5 wrong attempts → 15-minute lockout (per IP, best-effort), plus a delay on every wrong attempt.
+- The dashboard code isn't downloaded until the server confirms the session.
+
+**Setup:** in Vercel → Settings → Environment Variables add (Production + Preview), then redeploy:
+| Name | Value |
+|---|---|
+| `ADMIN_PASSWORD` | a long password (12+ characters) |
+| `ADMIN_SESSION_SECRET` | 64 random characters, e.g. from `openssl rand -hex 32` |
+
+Changing either value signs everyone out. Locally, put them in `.env.local`; `npm run dev` serves `/api` too.
+
+> Inventory changes in the admin are still demo-only (in-memory) until the database backend exists — new API routes should call `requireAdmin(req, res)` from `api/_lib/auth.js`.

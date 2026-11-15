@@ -29,7 +29,9 @@ const ProductSchema = new mongoose.Schema({
 }, { timestamps: true })
 ```
 
-## Routes (protect with auth middleware — never ship /admin without it)
+## Routes
+Auth is already built: wrap every admin route with `requireAdmin` from `api/_lib/auth.js`
+(it checks the signed `kidsla_admin` cookie set by `/api/login`).
 
 ```js
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
@@ -73,6 +75,6 @@ router.post('/api/admin/inventory/import', requireAdmin, upload.single('file'), 
 ```
 
 ## Also needed before launch
-- **Auth** for `/api/admin/*` (e.g. a single admin account + httpOnly session cookie, or Clerk/Auth0).
+- **Shared login rate-limit** across serverless instances (Upstash Redis / Vercel KV), if you see brute-force attempts.
 - **Order IDs** from a Mongo counter (`findOneAndUpdate({ _id: 'order' }, { $inc: { seq: 1 } }, { upsert: true })`) instead of random digits.
 - **Stock decrement** when you confirm a WhatsApp order (an "Orders" screen in the admin).

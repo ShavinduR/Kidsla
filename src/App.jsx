@@ -6,8 +6,8 @@ import { CartProvider } from './context/CartContext'
 import Storefront from './pages/Storefront'
 import { excludeAdmin, initMetaPixel } from './utils/analytics'
 
-// Admin is code-split: shoppers never download it.
-const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
+// Admin is code-split: shoppers never download it. The gate checks the server session first.
+const AdminGate = lazy(() => import('./pages/AdminGate'))
 
 export default function App() {
   useEffect(() => initMetaPixel(), [])
@@ -19,7 +19,7 @@ export default function App() {
           <Suspense fallback={<div className="grid min-h-screen place-items-center text-ink-soft">Loading…</div>}>
             <Routes>
               <Route path="/" element={<Storefront />} />
-              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin" element={<AdminGate />} />
               <Route path="*" element={<Storefront />} />
             </Routes>
           </Suspense>

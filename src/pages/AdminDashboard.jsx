@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ArrowLeft, Database, Download, FileSpreadsheet, Lock, Package, PackageX, RefreshCw, Search, Server, TriangleAlert, Upload, X,
+  ArrowLeft, Database, LogOut, Download, FileSpreadsheet, Lock, Package, PackageX, RefreshCw, Search, Server, TriangleAlert, Upload, X,
 } from 'lucide-react'
 import { useProducts } from '../context/ProductsContext'
 import { CLOTHING_SIZES } from '../data/sizeGuide'
@@ -17,7 +17,7 @@ const STATUS_STYLE = {
 }
 const STATUS_LABEL = { active: 'Active', coming_soon: 'Coming soon', hidden: 'Hidden' }
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ onLogout }) {
   const { products, applyUpdates, reset } = useProducts()
   const [query, setQuery] = useState('')
   const [cat, setCat] = useState('All')
@@ -25,18 +25,6 @@ export default function AdminDashboard() {
   const [toast, setToast] = useState('')
   const [busy, setBusy] = useState(false)
   const fileInput = useRef(null)
-
-  // Keep the admin page out of Google and set a clear tab title.
-  useEffect(() => {
-    const prevTitle = document.title
-    document.title = 'Inventory · KIDSLA Admin'
-    const meta = Object.assign(document.createElement('meta'), { name: 'robots', content: 'noindex, nofollow' })
-    document.head.appendChild(meta)
-    return () => {
-      document.title = prevTitle
-      meta.remove()
-    }
-  }, [])
 
   useEffect(() => {
     if (!toast) return
@@ -90,15 +78,21 @@ export default function AdminDashboard() {
           </Link>
           <p className="text-lg font-bold tracking-[0.2em]">KIDSLA</p>
           <span className="rounded-full bg-ink px-2.5 py-1 text-xs font-semibold text-cream">Admin</span>
+          <button
+            onClick={onLogout}
+            className="ml-auto inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-medium text-ink ring-1 ring-sand-dark transition-colors hover:bg-sand"
+          >
+            <LogOut className="h-4 w-4" /> Log out
+          </button>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div role="note" className="flex items-start gap-3 rounded-2xl bg-blush-light p-4 text-sm text-ink ring-1 ring-blush">
-          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-rose" />
+        <div role="note" className="flex items-start gap-3 rounded-2xl bg-sand/70 p-4 text-sm text-ink ring-1 ring-sand-dark">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-sage-dark" />
           <p>
-            <strong className="font-semibold">Demo mode.</strong> This page is a frontend preview: changes live in your browser only and reset on
-            refresh. Before going live it must sit behind a login on the Node.js backend — anyone can open <code>/admin</code> today.
+            <strong className="font-semibold">Signed in securely.</strong> Inventory is still demo data: imports change this browser only and reset on
+            refresh, until the database backend is connected.
           </p>
         </div>
 
