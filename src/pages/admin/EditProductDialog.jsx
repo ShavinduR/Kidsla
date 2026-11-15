@@ -86,7 +86,7 @@ export default function EditProductDialog({ product: initial, onClose, onSaved }
         </div>
         {isClothing ? (
           <fieldset>
-            <legend className="mb-1.5 text-sm font-medium">Stock per size</legend>
+            <legend className="mb-1.5 text-sm font-medium">Available to sell, per size</legend>
             <div className="grid grid-cols-3 gap-3">
               {SIZES.map((s) => (
                 <label key={s} className="block">
@@ -96,6 +96,9 @@ export default function EditProductDialog({ product: initial, onClose, onSaved }
                     onChange={(e) => setStock((st) => ({ ...st, [s]: e.target.value }))}
                     className={field} aria-label={`Stock ${s}`}
                   />
+                  {(base.reserved?.[s] ?? 0) > 0 && (
+                    <span className="mt-1 block text-xs text-ink-soft">+{base.reserved[s]} held by pending orders</span>
+                  )}
                 </label>
               ))}
             </div>

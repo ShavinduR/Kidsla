@@ -21,6 +21,8 @@ export const updateProduct = (edit) => call('/api/admin/products', json('PATCH',
 export const seedCatalogue = () => call('/api/admin/seed', json('POST', {}))
 
 export const fetchOrders = (status) => call(`/api/admin/orders${status ? `?status=${status}` : ''}`)
+export const fetchOrderCounts = () => call('/api/admin/orders?countsOnly=1')
+export const signOutAllDevices = () => call('/api/logout', json('POST', { all: true }))
 export const setOrderStatus = (id, status) => call('/api/admin/orders', json('PATCH', { id, status }))
 
 /** Same-origin download link (cookie included). */

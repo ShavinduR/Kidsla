@@ -5,11 +5,11 @@ import { getDb, toDoc } from '../_lib/db.js'
 import { initialProducts } from '../../src/data/products.js'
 
 export default handle(['POST'], async (req, res) => {
-  if (!requireAdmin(req, res)) return
+  if (!(await requireAdmin(req, res))) return
   const db = await getDb()
   const products = db.collection('products')
   if (await products.estimatedDocumentCount()) return send(res, 409, { error: 'The database already has products.' })
   const now = new Date()
-  await products.insertMany(initialProducts.map((p, i) => ({ ...toDoc(p), position: i, version: 0, createdAt: now, updatedAt: now })))
+  await products.insertMany(initialProducts.map((p, i) => ({ ...toDoc(p), position: i, version: 0, reserved: {}, createdAt: now, updatedAt: now })))
   send(res, 201, { inserted: initialProducts.length })
 })

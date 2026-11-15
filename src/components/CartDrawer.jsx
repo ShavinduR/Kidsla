@@ -116,7 +116,7 @@ export default function CartDrawer() {
     track('InitiateCheckout', { value: order.total, num_items: count, content_ids: lines.map((l) => l.id) })
 
     // Keep a receipt BEFORE clearing so the customer can re-open WhatsApp if it didn't launch.
-    setPlaced({ orderId: order.orderId, url, total: order.total, items: count })
+    setPlaced({ orderId: order.orderId, url, total: order.total, items: count, holdHours: order.holdHours })
     wa.go(url)
     clearCart()
     setSubmitting(false)
@@ -280,6 +280,11 @@ function OrderPlaced({ placed, onDone }) {
       <p className="mt-4 max-w-xs text-sm leading-relaxed text-ink-soft">
         Just press <strong className="text-ink">Send</strong> in WhatsApp. We’ll confirm your order and delivery shortly.
       </p>
+      {placed.holdHours && (
+        <p className="mt-3 max-w-xs rounded-2xl bg-sage-light/70 px-4 py-2.5 text-sm text-sage-dark">
+          We’re holding your items for <strong>{placed.holdHours} hours</strong> so nobody else can buy them.
+        </p>
+      )}
       <a href={placed.url} target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex items-center gap-2 rounded-full bg-wa px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-wa-dark">
         <ExternalLink className="h-4 w-4" /> WhatsApp didn’t open? Tap here
       </a>

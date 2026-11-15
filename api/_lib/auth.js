@@ -1,56 +1,43 @@
-// Admin auth helpers for Vercel Functions (plain Node — also used by the Vite dev server).
+// Admin authentication with SERVER-SIDE sessions (audit H4, Phase 1).
 //
 // Required environment variables (Vercel → Settings → Environment Variables, NOT prefixed with VITE_):
-//   ADMIN_PASSWORD        — the admin login password (use 12+ characters)
-//   ADMIN_SESSION_SECRET  — random string used to sign session cookies (e.g. `openssl rand -hex 32`)
-// Changing EITHER one invalidates every existing session (the signing key is derived from both).
+//   ADMIN_PASSWORD        the admin login password (use 16+ random characters)
+//   ADMIN_SESSION_SECRET  random string (e.g. `openssl rand -hex 32`)
+//
+// How it works:
+//   • Sign-in creates a random 256-bit session token. The browser gets it in an HttpOnly cookie;
+//     the database stores only its SHA-256 hash (a database leak doesn't leak usable sessions).
+//   • Every admin request looks the session up → Log out / "Sign out all devices" take effect instantly.
+//   • Each session records a fingerprint of ADMIN_PASSWORD + ADMIN_SESSION_SECRET. Changing either one
+//     makes every existing session invalid immediately.
+//   • Sessions expire after 8 hours (and MongoDB deletes them automatically via a TTL index).
 import crypto from 'node:crypto'
 import { send } from './http.js'
+import { getDb, isDbConfigured } from './db.js'
+import { ipKey } from './ratelimit.js'
 
 export { send, readJson } from './http.js'
+export { clientIp } from './ratelimit.js'
 
 export const COOKIE = 'kidsla_admin'
 const SESSION_HOURS = 8
-const MAX_FAILS = 5
-const LOCK_MINUTES = 15
 
-const b64url = (buf) => Buffer.from(buf).toString('base64url')
-const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest()
-const hmac = (data, secret) => crypto.createHmac('sha256', secret).update(data).digest('base64url')
+const sha256hex = (s) => crypto.createHash('sha256').update(String(s)).digest('hex')
 
 export const isConfigured = () =>
-  (process.env.ADMIN_PASSWORD ?? '').length >= 8 && (process.env.ADMIN_SESSION_SECRET ?? '').length >= 32
+  (process.env.ADMIN_PASSWORD ?? '').length >= 8 &&
+  (process.env.ADMIN_SESSION_SECRET ?? '').length >= 32 &&
+  isDbConfigured()
 
 /** Constant-time comparison (hashing first makes lengths equal). */
 export const passwordMatches = (input) =>
-  crypto.timingSafeEqual(sha256(input ?? ''), sha256(process.env.ADMIN_PASSWORD))
+  crypto.timingSafeEqual(
+    crypto.createHash('sha256').update(String(input ?? '')).digest(),
+    crypto.createHash('sha256').update(process.env.ADMIN_PASSWORD).digest(),
+  )
 
-/**
- * Signing key = ADMIN_SESSION_SECRET + sha256(ADMIN_PASSWORD).
- * Tokens are stateless, so this is what makes a password change revoke every session:
- * old tokens were signed with the old password's hash and no longer verify.
- */
-const signingKey = () =>
-  process.env.ADMIN_SESSION_SECRET + crypto.createHash('sha256').update(process.env.ADMIN_PASSWORD).digest('hex')
-
-export function createToken() {
-  const payload = b64url(JSON.stringify({ sub: 'admin', exp: Date.now() + SESSION_HOURS * 3600_000 }))
-  return `${payload}.${hmac(payload, signingKey())}`
-}
-
-export function verifyToken(token) {
-  if (!token || !isConfigured()) return false
-  const [payload, sig] = token.split('.')
-  if (!payload || !sig) return false
-  const expected = hmac(payload, signingKey())
-  if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false
-  try {
-    const { sub, exp } = JSON.parse(Buffer.from(payload, 'base64url').toString())
-    return sub === 'admin' && Date.now() < exp
-  } catch {
-    return false
-  }
-}
+/** Fingerprint of the current credentials. Changes if the password or secret changes. */
+const credentialTag = () => sha256hex(process.env.ADMIN_SESSION_SECRET + sha256hex(process.env.ADMIN_PASSWORD)).slice(0, 32)
 
 const readCookie = (req, name) =>
   (req.headers.cookie ?? '')
@@ -58,7 +45,40 @@ const readCookie = (req, name) =>
     .map((c) => c.trim().split('='))
     .find(([k]) => k === name)?.[1]
 
-export const isAuthenticated = (req) => verifyToken(readCookie(req, COOKIE))
+const sessions = async () => (await getDb()).collection('sessions')
+
+export async function createSession(req) {
+  const token = crypto.randomBytes(32).toString('base64url')
+  const now = new Date()
+  await (await sessions()).insertOne({
+    _id: sha256hex(token),
+    tag: credentialTag(),
+    createdAt: now,
+    expiresAt: new Date(now.getTime() + SESSION_HOURS * 3600_000),
+    device: String(req.headers['user-agent'] ?? '').slice(0, 160),
+    ip: ipKey(req),
+  })
+  return token
+}
+
+/** Returns the session document, or null. */
+export async function getSession(req) {
+  const token = readCookie(req, COOKIE)
+  if (!token || token.length > 100 || !isConfigured()) return null
+  return (await sessions()).findOne({ _id: sha256hex(token), tag: credentialTag(), expiresAt: { $gt: new Date() } })
+}
+
+export const isAuthenticated = async (req) => Boolean(await getSession(req))
+
+export async function destroySession(req) {
+  const token = readCookie(req, COOKIE)
+  if (token && token.length <= 100) await (await sessions()).deleteOne({ _id: sha256hex(token) })
+}
+
+/** "Sign out all devices". Returns how many sessions were ended. */
+export async function destroyAllSessions() {
+  return (await (await sessions()).deleteMany({})).deletedCount
+}
 
 const isLocal = (req) => /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(req.headers.host ?? '')
 
@@ -68,28 +88,9 @@ export function sessionCookie(req, token) {
   return parts.join('; ')
 }
 
-/** Guard for admin endpoints:  if (!requireAdmin(req, res)) return */
-export function requireAdmin(req, res) {
-  if (isAuthenticated(req)) return true
+/** Guard for admin endpoints:  if (!(await requireAdmin(req, res))) return */
+export async function requireAdmin(req, res) {
+  if (await isAuthenticated(req)) return true
   send(res, 401, { error: 'Not signed in' })
   return false
 }
-
-// ---- brute-force protection ----
-// Best-effort, per server instance (serverless instances don't share memory).
-// For stronger protection add Upstash Redis / Vercel KV — see docs/BACKEND.md.
-const attempts = new Map()
-export const clientIp = (req) => String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? '?').split(',')[0].trim()
-
-export function lockedFor(req) {
-  const a = attempts.get(clientIp(req))
-  return a?.until && a.until > Date.now() ? Math.ceil((a.until - Date.now()) / 60000) : 0
-}
-export function recordFailure(req) {
-  const ip = clientIp(req)
-  const a = attempts.get(ip) ?? { count: 0, until: 0 }
-  a.count += 1
-  if (a.count >= MAX_FAILS) Object.assign(a, { count: 0, until: Date.now() + LOCK_MINUTES * 60000 })
-  attempts.set(ip, a)
-}
-export const clearFailures = (req) => attempts.delete(clientIp(req))

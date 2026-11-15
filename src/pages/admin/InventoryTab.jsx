@@ -27,6 +27,7 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
       total: products.length,
       active: products.filter((p) => p.status === 'active').length,
       units: clothing.reduce((s, p) => s + totalStock(p), 0),
+      held: clothing.reduce((s, p) => s + SIZES.reduce((a, z) => a + (p.reserved?.[z] ?? 0), 0), 0),
       low: slots.filter((n) => n > 0 && n <= LOW).length,
       out: slots.filter((n) => n === 0).length,
     }
@@ -73,7 +74,7 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
         {[
           { label: 'Products', value: stats.total, Icon: Package },
           { label: 'Active', value: stats.active, Icon: FileSpreadsheet },
-          { label: 'Units in stock', value: stats.units, Icon: Database },
+          { label: `Available units${stats.held ? ` (+${stats.held} on hold)` : ''}`, value: stats.units, Icon: Database },
           { label: `Low stock sizes (≤${LOW})`, value: stats.low, Icon: TriangleAlert, warn: stats.low > 0 },
           { label: 'Sold-out sizes', value: stats.out, Icon: PackageX, warn: stats.out > 0 },
         ].map(({ label, value, Icon, warn }) => (
@@ -131,9 +132,11 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
                 {SIZES.map((s) => {
                   if (p.category !== 'Clothing') return <td key={s} className="px-3 py-3 text-center text-ink-soft">—</td>
                   const n = p.stock?.[s] ?? 0
+                  const held = p.reserved?.[s] ?? 0
                   return (
                     <td key={s} className="px-3 py-3 text-center">
                       <span className={`inline-flex min-w-9 justify-center rounded-full px-2 py-1 text-xs font-semibold ${n === 0 ? 'bg-rose/10 text-rose' : n <= LOW ? 'bg-blush-light text-ink' : 'bg-sage-light/70 text-sage-dark'}`}>{n}</span>
+                      {held > 0 && <span className="mt-0.5 block text-[11px] text-ink-soft" title="Held by pending orders">+{held} held</span>}
                     </td>
                   )
                 })}
@@ -154,6 +157,7 @@ export default function InventoryTab({ products, onReload, onProductSaved, toast
         <summary className="cursor-pointer font-semibold">How bulk update works</summary>
         <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-ink-soft">
           <li><strong className="text-ink">Export to Excel</strong>, then open the file.</li>
+          <li><code>stock_…</code> = units <strong className="text-ink">available to sell</strong>. Units held by pending orders are shown in <code>held_…</code> (read-only). Units on your shelf = stock + held.</li>
           <li>Edit <code>price</code>, <code>status</code> (active / coming_soon / hidden) or the <code>stock_…</code> columns. Don’t change <code>id</code> or <code>version</code>.</li>
           <li>Import soon after exporting. If a product sells or is edited in between, its row is skipped (so stock never jumps back) and you just export again.</li>
           <li>Save, then click <strong className="text-ink">Bulk Import Update</strong> and pick the file (.xlsx or .csv).</li>

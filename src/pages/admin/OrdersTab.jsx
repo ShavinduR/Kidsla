@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Banknote, Check, Inbox, Landmark, MapPin, RefreshCw, X } from 'lucide-react'
+import { Banknote, Check, Clock, Inbox, Landmark, MapPin, RefreshCw, X } from 'lucide-react'
 import { Notice, Spinner, btn } from './ui'
 import { fetchOrders, setOrderStatus } from '../../services/adminApi'
 import { formatLKR } from '../../utils/format'
@@ -8,9 +8,16 @@ const FILTERS = [
   { id: '', label: 'All' },
   { id: 'pending', label: 'Pending' },
   { id: 'confirmed', label: 'Confirmed' },
+  { id: 'expired', label: 'Expired' },
   { id: 'cancelled', label: 'Cancelled' },
 ]
-const STATUS_STYLE = { pending: 'bg-blush-light text-ink', confirmed: 'bg-sage-light text-sage-dark', cancelled: 'bg-sand text-ink-soft' }
+const STATUS_STYLE = {
+  pending: 'bg-blush-light text-ink',
+  confirmed: 'bg-sage-light text-sage-dark',
+  expired: 'bg-sand-dark/60 text-ink',
+  cancelled: 'bg-sand text-ink-soft',
+}
+const POLL_MS = 30_000
 const when = (d) =>
   new Date(d).toLocaleString('en-GB', { timeZone: 'Asia/Colombo', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
@@ -30,10 +37,14 @@ export default function OrdersTab({ toast, onStockChanged, onCounts }) {
 
   useEffect(() => {
     load() // eslint-disable-line react-hooks/set-state-in-effect -- fetch on filter change
+    // Auto-refresh while this tab is visible, so new orders appear without pressing Refresh.
+    const t = setInterval(() => document.visibilityState === 'visible' && load(), POLL_MS)
+    return () => clearInterval(t)
   }, [load])
 
   const act = async (order, status) => {
-    if (status === 'cancelled' && !window.confirm(`Cancel order ${order.id}?${order.status === 'confirmed' ? ' Its items go back into stock.' : ''}`)) return
+    const note = order.status === 'confirmed' || order.stockHeld ? ' Its items go back into stock.' : ''
+    if (status === 'cancelled' && !window.confirm(`Cancel order ${order.id}?${note}`)) return
     setWorking(order.id)
     const res = await setOrderStatus(order.id, status)
     setWorking(null)
@@ -51,7 +62,8 @@ export default function OrdersTab({ toast, onStockChanged, onCounts }) {
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Orders</h1>
           <p className="mt-1 max-w-2xl text-ink-soft">
             Every checkout is saved here as <strong className="text-ink">Pending</strong>. When the customer’s WhatsApp message arrives,
-            match the order ID and press <strong className="text-ink">Confirm</strong>. That takes the items out of stock.
+            match the order ID and press <strong className="text-ink">Confirm</strong>. Items are held for 24 hours from checkout; unconfirmed orders
+            then <strong className="text-ink">expire</strong> and their items go back on sale. Updates every 30 seconds.
           </p>
         </div>
         <button onClick={load} className={btn.ghost}><RefreshCw className="h-4 w-4" /> Refresh</button>
@@ -88,6 +100,10 @@ export default function OrdersTab({ toast, onStockChanged, onCounts }) {
                     <div>
                       <p className="font-mono text-base font-semibold tracking-wide">{o.id}</p>
                       <p className="text-sm text-ink-soft">{when(o.createdAt)}</p>
+                      {o.status === 'pending' && o.expiresAt && (
+                        <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose"><Clock className="h-3.5 w-3.5" /> Held until {when(o.expiresAt)}</p>
+                      )}
+                      {o.status === 'expired' && <p className="mt-1 text-xs text-ink-soft">Hold ended: items back on sale. You can still confirm if stock allows.</p>}
                     </div>
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${STATUS_STYLE[o.status]}`}>{o.status}</span>
                   </div>
@@ -110,7 +126,7 @@ export default function OrdersTab({ toast, onStockChanged, onCounts }) {
                   </dl>
                   {o.status !== 'cancelled' && (
                     <div className="mt-4 flex gap-2 pt-1">
-                      {o.status === 'pending' && (
+                      {['pending', 'expired'].includes(o.status) && (
                         <button onClick={() => act(o, 'confirmed')} disabled={working === o.id} className={`${btn.primary} h-11 flex-1 text-sm`}>
                           <Check className="h-4 w-4" /> Confirm
                         </button>

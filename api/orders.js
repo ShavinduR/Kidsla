@@ -1,20 +1,14 @@
 // Public: create an order when the customer taps "Place Order via WhatsApp".
-// The server re-checks availability and recomputes every price — the browser's numbers are never trusted.
-import { clientIp } from './_lib/auth.js'
+// The server re-checks availability, recomputes every price (the browser's numbers are never trusted)
+// and HOLDS the stock for 24 hours inside a transaction, so the last unit can't be promised twice.
 import { handle, readJson, send } from './_lib/http.js'
 import { fromDoc, getDb } from './_lib/db.js'
+import { HOLD_HOURS, OrderError, createHeldOrder, releaseExpired } from './_lib/orders.js'
+import { hit, ipKey, minutes } from './_lib/ratelimit.js'
+import { alertNewOrder } from './_lib/alerts.js'
 import { isOrderable } from '../src/data/products.js'
 import { DISTRICTS, PAYMENT_METHODS, deliveryFeeFor } from '../src/data/site.js'
 import { ID_PATTERN } from '../shared/inventory.js'
-
-const recent = new Map() // best-effort spam guard per instance: 10 orders / 10 min / IP
-const tooMany = (ip) => {
-  const now = Date.now()
-  const list = (recent.get(ip) ?? []).filter((t) => now - t < 600_000)
-  list.push(now)
-  recent.set(ip, list)
-  return list.length > 10
-}
 
 // Order numbers follow Sri Lanka time: KD-YYMM-NNN, counting up from 001 each month.
 const yymm = () => {
@@ -25,7 +19,13 @@ const yymm = () => {
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 
 export default handle(['POST'], async (req, res) => {
-  if (tooMany(clientIp(req))) return send(res, 429, { error: 'Too many orders from this device. Please message us on WhatsApp.' })
+  // Shared rate limits (all server instances): per IP per 10 min, per IP per day, and site-wide per hour.
+  const ip = ipKey(req)
+  for (const [rule, who] of [['orderIp', ip], ['orderIpDay', ip], ['orderAll', 'all']]) {
+    const r = await hit(rule, who)
+    if (!r.allowed)
+      return send(res, 429, { error: `Too many orders right now. Please try again in ${minutes(r.retryAfter)}, or message us on WhatsApp.` }, { 'Retry-After': String(r.retryAfter) })
+  }
   const body = await readJson(req)
   if (!body) return send(res, 400, { error: 'Invalid request' })
 
@@ -48,6 +48,7 @@ export default handle(['POST'], async (req, res) => {
   }
 
   const db = await getDb()
+  await releaseExpired(10) // free stock from abandoned orders before checking availability
   const ids = [...new Set(items.map((i) => i.id))]
   const products = new Map((await db.collection('products').find({ _id: { $in: ids } }).toArray()).map((d) => [d._id, fromDoc(d)]))
 
@@ -81,24 +82,25 @@ export default handle(['POST'], async (req, res) => {
   const deliveryFee = deliveryFeeFor(customer.district)
   const total = subtotal + deliveryFee
 
-  const period = yymm()
-  const counter = await db
-    .collection('counters')
-    .findOneAndUpdate({ _id: `order-${period}` }, { $inc: { seq: 1 } }, { upsert: true, returnDocument: 'after' })
-  const orderId = `KD-${period}-${String(counter.seq).padStart(3, '0')}`
+  // Hold the stock + assign the order number in ONE transaction: if any line is short (someone
+  // else just bought it), nothing is held and no order number is used up.
+  let order
+  try {
+    order = await createHeldOrder({
+      orderIdFor: async (database, session) => {
+        const period = yymm()
+        const counter = await database
+          .collection('counters')
+          .findOneAndUpdate({ _id: `order-${period}` }, { $inc: { seq: 1 } }, { upsert: true, returnDocument: 'after', session })
+        return `KD-${period}-${String(counter.seq).padStart(3, '0')}`
+      },
+      doc: { customer, items: lines, subtotal, deliveryFee, total },
+    })
+  } catch (err) {
+    if (err instanceof OrderError) return send(res, err.status, { error: err.message, ...err.extra })
+    throw err
+  }
 
-  const now = new Date()
-  await db.collection('orders').insertOne({
-    _id: orderId,
-    status: 'pending',
-    customer,
-    items: lines,
-    subtotal,
-    deliveryFee,
-    total,
-    createdAt: now,
-    history: [{ status: 'pending', at: now }],
-  })
-
-  send(res, 201, { orderId, items: lines, subtotal, deliveryFee, total })
+  alertNewOrder(order) // email to the owner, in the background
+  send(res, 201, { orderId: order._id, items: lines, subtotal, deliveryFee, total, holdHours: HOLD_HOURS, expiresAt: order.expiresAt })
 })

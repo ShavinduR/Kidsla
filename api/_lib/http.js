@@ -1,4 +1,5 @@
 // Small helpers so handlers run unchanged on Vercel and in Vite's local dev server.
+import { alertServerError } from './alerts.js'
 
 export function send(res, status, body, headers = {}) {
   res.statusCode = status
@@ -97,6 +98,7 @@ export const handle = (methods, fn, { contentTypes } = {}) => async (req, res) =
   } catch (err) {
     console.error(`[${req.method} ${req.url}]`, err)
     if (err?.code === 'DB_NOT_CONFIGURED') return send(res, 503, { error: err.message, configured: false })
+    alertServerError(`${req.method} ${String(req.url).split('?')[0]}`, err) // email (max 1 per 10 min)
     if (/MongoServerSelectionError|MongoNetworkError|querySrv|ENOTFOUND|ECONNREFUSED/.test(`${err?.name} ${err?.message}`))
       return send(res, 503, { error: 'Can’t reach the database right now. Please try again shortly.' })
     send(res, 500, { error: 'Something went wrong on the server.' })

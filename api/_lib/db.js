@@ -10,6 +10,12 @@ let indexesReady = null
 
 export const isDbConfigured = () => Boolean(process.env.MONGODB_URI)
 
+/** The connected MongoClient (needed to start transactions). */
+export async function getClient() {
+  await getDb()
+  return clientPromise
+}
+
 export async function getDb() {
   if (!isDbConfigured()) {
     const err = new Error('Database not connected yet. Add MONGODB_URI in Vercel, then redeploy.')
@@ -31,6 +37,9 @@ export async function getDb() {
     db.collection('orders').createIndex({ createdAt: -1 }),
     db.collection('orders').createIndex({ status: 1, createdAt: -1 }),
     db.collection('products').createIndex({ status: 1 }),
+    db.collection('orders').createIndex({ status: 1, expiresAt: 1 }), // expiry sweep
+    db.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }), // auto-delete old sessions
+    db.collection('ratelimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }), // auto-delete old counters
     // One-time backfill: products created before version tracking start at version 0.
     db.collection('products').updateMany({ version: { $exists: false } }, { $set: { version: 0 } }),
   ]).catch((err) => {

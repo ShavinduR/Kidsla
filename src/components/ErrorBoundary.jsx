@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import { waLink } from '../utils/whatsapp'
+import { captureError } from '../utils/monitoring'
 
 // After a new deploy, a visitor with the site already open may request a code chunk that no
 // longer exists. That's not a real bug: one automatic reload fixes it.
@@ -26,7 +27,7 @@ export default class ErrorBoundary extends Component {
       return
     }
     console.error('[KIDSLA] crashed:', error, info?.componentStack)
-    // Later: send to Sentry here (Sentry.captureException(error)).
+    captureError(error, { componentStack: info?.componentStack })
   }
 
   render() {

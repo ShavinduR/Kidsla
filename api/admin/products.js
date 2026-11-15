@@ -6,7 +6,7 @@ import { applyUpdates, loadProducts } from '../_lib/catalog.js'
 import { ID_PATTERN, validateEdit } from '../../shared/inventory.js'
 
 export default handle(['GET', 'PATCH'], async (req, res) => {
-  if (!requireAdmin(req, res)) return
+  if (!(await requireAdmin(req, res))) return
   if (!isDbConfigured()) return send(res, 200, { configured: false, products: [] })
 
   if (req.method === 'GET') return send(res, 200, { configured: true, products: await loadProducts() })

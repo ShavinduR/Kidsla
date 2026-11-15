@@ -7,6 +7,8 @@ import { applyUpdates, loadProducts } from '../_lib/catalog.js'
 import { diffRows } from '../../shared/inventory.js'
 import { parseCSV } from '../../shared/csv.js'
 import { UnsafeFileError, assertSafeZip } from '../_lib/zipguard.js'
+import { hit, minutes } from '../_lib/ratelimit.js'
+import { getSession } from '../_lib/auth.js'
 
 const MAX_BYTES = 2_000_000 // uploaded file (compressed)
 const MAX_ROWS = 5000 // data rows read; anything beyond is ignored and reported
@@ -45,7 +47,9 @@ async function parseXlsx(buffer) {
 }
 
 export default handle(['POST'], async (req, res) => {
-  if (!requireAdmin(req, res)) return
+  if (!(await requireAdmin(req, res))) return
+  const limit = await hit('import', String((await getSession(req))?._id ?? 'admin').slice(0, 16))
+  if (!limit.allowed) return send(res, 429, { error: `Too many uploads. Try again in ${minutes(limit.retryAfter)}.` })
   const q = query(req)
   const name = (q.get('filename') ?? '').toLowerCase()
   const buffer = await readRaw(req, MAX_BYTES)

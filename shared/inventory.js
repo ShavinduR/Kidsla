@@ -6,7 +6,13 @@ export const STATUSES = ['active', 'coming_soon', 'hidden']
 // `version` = optimistic-concurrency counter. Every write to a product (admin edit, import, order
 // confirm/cancel) increments it. An import row or edit is only applied if the version it was based on
 // is still current, so stale spreadsheets / dialogs can't silently overwrite newer stock (audit H1).
-export const INVENTORY_COLUMNS = ['id', 'version', 'title', 'category', 'gender', 'material', 'price', 'status', ...SIZES.map((s) => `stock_${s}`)]
+// stock_<size> = units AVAILABLE to sell (editable). held_<size> = units held by pending orders
+// (read-only, for information; ignored on import). Units on your shelf = stock + held.
+export const INVENTORY_COLUMNS = [
+  'id', 'version', 'title', 'category', 'gender', 'material', 'price', 'status',
+  ...SIZES.map((s) => `stock_${s}`),
+  ...SIZES.map((s) => `held_${s}`),
+]
 export const ID_PATTERN = /^[A-Z0-9][A-Z0-9-]{2,24}$/
 
 /** Shorten user-supplied text before echoing it back in messages (audit M1). */
@@ -31,6 +37,7 @@ export const productsToRows = (products) =>
     price: p.price,
     status: p.status,
     ...Object.fromEntries(SIZES.map((s) => [`stock_${s}`, p.category === 'Clothing' ? (p.stock?.[s] ?? 0) : ''])),
+    ...Object.fromEntries(SIZES.map((s) => [`held_${s}`, p.category === 'Clothing' ? (p.reserved?.[s] ?? 0) : ''])),
   }))
 
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === ''

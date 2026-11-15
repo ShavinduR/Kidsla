@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Database, LogOut, Package, ShoppingBag } from 'lucide-react'
+import { ArrowLeft, Database, LogOut, MonitorX, Package, ShoppingBag } from 'lucide-react'
 import InventoryTab from './InventoryTab'
 import OrdersTab from './OrdersTab'
 import { Notice, Spinner, btn } from './ui'
-import { fetchAdminProducts, seedCatalogue } from '../../services/adminApi'
+import { fetchAdminProducts, fetchOrderCounts, seedCatalogue, signOutAllDevices } from '../../services/adminApi'
 
 export default function AdminDashboard({ onLogout }) {
   const [tab, setTab] = useState('inventory')
@@ -30,6 +30,29 @@ export default function AdminDashboard({ onLogout }) {
   }, [load])
 
   const onCounts = useCallback((c) => setPending(c.pending ?? 0), [])
+
+  // Pending-order badge stays fresh on every tab (and in the browser tab title).
+  useEffect(() => {
+    if (!(state.status === 'ready' && state.configured)) return
+    const poll = async () => {
+      if (document.visibilityState !== 'visible') return
+      const r = await fetchOrderCounts()
+      if (r.ok) setPending(r.counts?.pending ?? 0)
+    }
+    poll()
+    const t = setInterval(poll, 30_000)
+    return () => clearInterval(t)
+  }, [state.status, state.configured])
+
+  useEffect(() => {
+    document.title = pending ? `(${pending}) Admin · KIDSLA` : 'Admin · KIDSLA'
+  }, [pending])
+
+  const signOutEverywhere = async () => {
+    if (!window.confirm('Sign out on ALL devices, including this one? Use this if you think someone else has access.')) return
+    await signOutAllDevices()
+    onLogout()
+  }
 
   const seed = async () => {
     const res = await seedCatalogue()
@@ -77,7 +100,10 @@ export default function AdminDashboard({ onLogout }) {
           <Link to="/" className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-sand" aria-label="Back to store"><ArrowLeft className="h-5 w-5" /></Link>
           <p className="text-lg font-bold tracking-[0.2em]">KIDSLA</p>
           <span className="hidden rounded-full bg-ink px-2.5 py-1 text-xs font-semibold text-cream sm:inline">Admin</span>
-          <button onClick={onLogout} className="ml-auto inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-medium ring-1 ring-sand-dark hover:bg-sand">
+          <button onClick={signOutEverywhere} className="ml-auto inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm font-medium text-ink-soft hover:bg-sand" title="Sign out all devices">
+            <MonitorX className="h-4 w-4" /> <span className="hidden sm:inline">All devices</span>
+          </button>
+          <button onClick={onLogout} className="inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-medium ring-1 ring-sand-dark hover:bg-sand">
             <LogOut className="h-4 w-4" /> Log out
           </button>
         </div>

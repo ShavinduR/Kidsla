@@ -14,14 +14,19 @@ Everything server-side lives in `/api` (Vercel deploys each file as a function) 
 | `POST /api/login`, `/api/logout`, `GET /api/session` | — | Admin auth (see README). |
 
 ## Collections (database `kidsla`)
+- **sessions** `{ _id: sha256(token), tag, createdAt, expiresAt (TTL), device, ip (hashed) }`
+- **ratelimits** `{ _id: "rule:who:window", count, expiresAt (TTL) }`
 - **products** `{ _id: "KD-G-001", title, category, gender, material, price, status, sizes, colors, images, stock: { "1-2Y": 6, … }, position }`
 - **orders** `{ _id: "KD-2611-001", status: pending|confirmed|cancelled, customer, items[], subtotal, deliveryFee, total, createdAt, history[] }`
 - **counters** `{ _id: "order-2611", seq }`: monthly order number
 
-## Order & stock rules
-- **Pending** orders don't touch stock (customers may never press Send in WhatsApp).
-- **Confirm** takes stock only if enough is left for every line, otherwise nothing changes and you're told which item is short.
-- **Cancel** a confirmed order → items go back into stock.
+## Order & stock rules (`api/_lib/orders.js`, all in MongoDB transactions)
+- `stock.<size>` = units **available** to sell; `reserved.<size>` = units **held** by pending orders.
+- **Checkout** takes stock with "only if stock ≥ qty" inside a transaction and holds it for 24 h. Concurrent checkouts for the last unit: exactly one succeeds (tested with 20 at once). Failed attempts don't use up order numbers.
+- **Confirm** a held order → held units become sold. Confirm an **expired** order → takes stock again if available.
+- **Cancel** → held or sold units go back on sale.
+- **Expiry** (pending > 24 h → `expired`, stock released) runs at every checkout, on every admin Orders load and daily via `/api/cron/expire-orders` (needs `CRON_SECRET`).
+- Orders created before stock holding existed (no `stockHeld` field) never expire; confirming them takes stock as before.
 - If the API/database is down at checkout, the order still goes to WhatsApp with a **fallback ID `KDX-YYMM-XXXX`** (random, different prefix). KDX orders are not in the admin: handle them from the WhatsApp chat.
 - Every product has a `version` that increments on every write (edit, import, confirm, cancel). Edits and import rows only apply if the version they were based on is still current; otherwise they're refused (409 / skipped) instead of overwriting newer stock.
 
@@ -34,6 +39,6 @@ Uses **ExcelJS**. The npm `xlsx` package is stuck at 0.18.5 with known security 
 - Security headers + CSP (Report-Only) are in `vercel.json`; violation reports are logged by `/api/csp-report`.
 
 ## Known limits / next steps
-- Confirm/cancel use step-by-step updates with undo, not a MongoDB transaction. A crash mid-confirm could leave stock slightly off; fix in the Inventory tab.
-- Login lockout and order spam limits are per server instance. Add Upstash Redis if abuse appears.
+- Rate limits use MongoDB (no extra service). At much higher traffic, Upstash Redis would be cheaper per request.
+- Alerts are email (Resend). Cloudflare Turnstile on checkout is the next step if spam orders appear.
 - No "add new product" form yet: new products need adding to the database (or ask for the feature).
