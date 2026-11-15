@@ -4,7 +4,7 @@ import { Analytics } from '@vercel/analytics/react'
 import { ProductsProvider } from './context/ProductsContext'
 import { CartProvider } from './context/CartContext'
 import Storefront from './pages/Storefront'
-import { initMetaPixel } from './utils/analytics'
+import { excludeAdmin, initMetaPixel } from './utils/analytics'
 
 // Admin is code-split: shoppers never download it.
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
@@ -24,8 +24,13 @@ export default function App() {
             </Routes>
           </Suspense>
         </BrowserRouter>
-        {/* Vercel Analytics — enable in Vercel → Project → Analytics. No-op until then. */}
-        <Analytics />
+        {/*
+          Vercel Web Analytics — counts visitors & page views on every route automatically
+          (React Router navigations included). Data appears once Analytics is enabled in
+          Vercel → Project → Analytics. Loads /_vercel/insights/script.js, which only exists
+          on Vercel deployments (404 locally is expected).
+        */}
+        <Analytics beforeSend={excludeAdmin} />
       </CartProvider>
     </ProductsProvider>
   )

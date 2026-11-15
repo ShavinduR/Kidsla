@@ -29,7 +29,7 @@ npm run build
 1. **Environment variables** (Project → Settings → Environment Variables):
    - `VITE_SITE_URL` = your live URL, e.g. `https://kidsla.vercel.app` or `https://kidsla.lk` (no trailing slash). Needed for link previews.
    - `VITE_META_PIXEL_ID` = your Pixel ID (optional).
-2. **Analytics**: Project → Analytics → Enable.
+2. **Analytics**: Project → **Analytics** tab → **Enable** (Web Analytics). `@vercel/analytics` + `<Analytics />` are already in `src/App.jsx`; visitors and page views appear a few minutes after the next deploy. `/admin` visits are excluded. Shop events (`ViewContent`, `AddToCart`, `InitiateCheckout`, `Lead`) are also sent as custom events, which Vercel shows on Pro plans.
 3. Redeploy. Test your link preview at https://developers.facebook.com/tools/debug/ (also refreshes WhatsApp's cache).
 
 > ⚠️ `/admin` is a frontend demo with no login. Changes are in-memory only. Add backend auth before using it for real (see `docs/BACKEND.md`).
